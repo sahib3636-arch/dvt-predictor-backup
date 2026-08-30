@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1e1922">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DvT Predictor">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="description" content="Dragon vs Tiger live predictor with 24/7 round recorder">
+<title>DvT Predictor</title>
+<style>
+/* ═══════════════════════════════════════════════════════
+   GAME-DNA THEME — extracted from actual FlyingChess DvT
+   bg:30,25,34 · dragon:190,125,69 · tiger:83,106,165
+   gold:227,175,80 · green:109,188,97
+   ═══════════════════════════════════════════════════════ */
+:root{
+  --bg:#1e1922; --bg2:#282030; --bg3:#322a3a;
+  --d:#e8963f; --d2:#a35c17; --d-txt:#ffd9a8;
+  --t:#3b6fc4; --t2:#1d3f7a; --t-txt:#9cc4ff;
+  --x:#35d99a; --x2:#1d7a4e;
+  --gold:#e3af50; --gold-txt:#f5d78e;
+  --good:#6dbc61; --bad:#e06060; --warn:#e3af50;
+  --txt:#e8e0d8; --mut:#a89888; --dim:#6a5f55;
+  --line:rgba(227,175,80,.15);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html{color-scheme:dark}
+html,body{height:100%;margin:0}
+button{
+  -webkit-appearance:none;appearance:none;
+  background:transparent;color:inherit;border:none;
+  font-family:inherit;
+}
+body{
+  background:var(--bg); color:var(--txt);
+  font:16px/1.4 'Segoe UI',system-ui,-apple-system,sans-serif;
+  font-variant-numeric:tabular-nums; overflow-x:hidden;
+}
+#wrap{max-width:680px;min-height:100%;margin:0 auto;display:flex;flex-direction:column;
+  padding:0 14px calc(92px + env(safe-area-inset-bottom))}
+
+/* ── HEADER ── */
+header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:12px;
+  padding:calc(10px + env(safe-area-inset-top)) 4px 10px;
+  background:linear-gradient(180deg,var(--bg) 80%,transparent)}
+.logo{width:44px;height:44px;flex:none;border-radius:12px;overflow:hidden;
+  box-shadow:0 0 16px rgba(227,175,80,.3)}
+header h1{font-size:18px;margin:0;font-weight:900;letter-spacing:.5px}
+header h1 span{background:linear-gradient(135deg,#f5d78e,#e3af50 50%,#b8860b);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+header .sub{font-size:9px;letter-spacing:3px;color:var(--gold);margin-top:2px;font-weight:800}
+#hstat{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut)}
+.vdot{width:9px;height:9px;border-radius:50%;background:var(--warn);
+  box-shadow:0 0 8px currentColor;animation:vpulse 2s infinite}
+.vdot.g{background:var(--good)} .vdot.r{background:var(--bad)}
+@keyframes vpulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* ── GAME TABLE (main card) ── */
+.table{
+  background:radial-gradient(140% 100% at 50% 0%, var(--bg3) 0%, var(--bg2) 40%, var(--bg) 100%);
+  border:2px solid var(--line); border-radius:20px;
+  padding:16px 14px 14px; margin:0 0 12px; position:relative; overflow:hidden;
+  box-shadow:0 8px 32px rgba(0,0,0,.4), inset 0 1px 0 rgba(227,175,80,.1);
+}
+.table::before{content:'';position:absolute;inset:6px;border:1px solid rgba(227,175,80,.08);
+  border-radius:16px;pointer-events:none}
+.table-label{font-size:10px;letter-spacing:3px;color:var(--gold);font-weight:800;
+  text-transform:uppercase;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.table-label .right{margin-left:auto;color:var(--mut);text-transform:none;letter-spacing:0;font-weight:600}
+
+/* ── LIVE STRIP ── */
+.livestrip{display:flex;align-items:center;gap:10px;font-size:12.5px;
+  background:rgba(227,175,80,.08); border:1px solid rgba(227,175,80,.25);
+  border-radius:999px;padding:8px 14px;margin:0 0 14px;
+  overflow:hidden;white-space:nowrap}
+.livestrip .okdot{width:8px;height:8px;border-radius:50%;background:var(--good);
+  box-shadow:0 0 10px var(--good);flex:none;animation:vpulse 1.5s infinite}
+.livestrip .baddot{width:8px;height:8px;border-radius:50%;background:var(--bad);
+  box-shadow:0 0 10px var(--bad);flex:none}
+.livestrip .warn{width:8px;height:8px;border-radius:50%;background:var(--warn);flex:none}
+.livestrip .ltext{flex:1;overflow:hidden;text-overflow:ellipsis}
+.livestrip b{color:var(--gold-txt)}
+.ringwrap{position:relative;width:36px;height:36px;flex:none}
+.ringwrap svg{transform:rotate(-90deg)}
+.ringwrap .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:900}
+.ringwrap .ph.bet{color:var(--good)} .ringwrap .ph.soon{color:var(--warn)} .ringwrap .ph.now{color:var(--bad)}
+
+/* ── VERDICT ── */
+.verdict-zone{text-align:center;padding:8px 0 4px}
+.vlab{font-size:11px;letter-spacing:4px;color:var(--gold);font-weight:800}
+.vpick{font-size:clamp(32px,10vw,46px);font-weight:900;letter-spacing:2px;
+  margin:4px 0;line-height:1.1;
+  text-shadow:0 0 30px rgba(227,175,80,.2)}
+.vpick.d{color:var(--d-txt)} .vpick.t{color:var(--t-txt)}
+.vpct{font-size:15px;color:var(--mut);font-weight:800}
+.vtag{display:inline-block;font-size:9.5px;letter-spacing:2px;font-weight:800;
+  color:var(--dim);border:1px solid var(--line);border-radius:999px;
+  padding:3px 12px;margin-top:6px}
+.vtag.gold{color:var(--gold);border-color:rgba(227,175,80,.4)}
+.vtag.red{color:var(--bad);border-color:rgba(224,96,96,.4)}
+.dtclone-line{margin-top:8px;font-size:11.5px;font-weight:700;color:var(--mut);letter-spacing:.2px;text-align:center;line-height:1.35}
+.dtclone-line b{font-weight:900;letter-spacing:.8px}
+.dtclone-line .d{color:var(--d-txt)} .dtclone-line .t{color:var(--t-txt)}
+
+/* ── COINS ── */
+.coinwrap{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;margin:10px 0 4px}
+.coin{text-align:center;position:relative}
+.coin svg{width:clamp(80px,24vw,110px);height:clamp(80px,24vw,110px);
+  display:block;margin:0 auto;transition:transform .3s;filter:drop-shadow(0 6px 18px rgba(0,0,0,.5))}
+.coin.fav svg{transform:translateY(-4px);filter:drop-shadow(0 0 10px rgba(227,175,80,.3)) drop-shadow(0 6px 18px rgba(0,0,0,.5))}
+.coin .cp{font-size:16px;font-weight:900;margin-top:4px}
+.coin .cw{font-size:10px;letter-spacing:3px;font-weight:800;margin-top:0}
+.coin.who-d .cw{color:var(--d-txt)} .coin.who-t .cw{color:var(--t-txt)}
+.coin .sig{position:absolute;top:-6px;left:50%;transform:translateX(-50%);
+  background:linear-gradient(135deg,#f5d78e,#e3af50 50%,#b8860b);
+  color:#1e1922;font-size:9px;font-weight:900;letter-spacing:1.5px;
+  padding:3px 12px;border-radius:999px;display:none;white-space:nowrap;
+  box-shadow:0 0 12px rgba(227,175,80,.5)}
+.coin.fav .sig{display:block}
+.vs-badge{width:36px;height:36px;border-radius:50%;flex:none;
+  background:linear-gradient(135deg,#f5d78e,#e3af50 50%,#b8860b);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:900;color:var(--bg);box-shadow:0 0 14px rgba(227,175,80,.4)}
+
+/* ── TIE BAR ── */
+.tierow{display:flex;align-items:center;gap:10px;margin:12px 4px 4px}
+.tierow .tlab{font-size:10px;letter-spacing:2px;font-weight:800;color:var(--x)}
+.tiebar{flex:1;height:18px;background:rgba(227,175,80,.08);border:1px solid rgba(227,175,80,.2);
+  border-radius:10px;overflow:hidden}
+.tiebar>div{height:100%;background:linear-gradient(90deg,var(--x),var(--x2));border-radius:8px}
+.tierow .tp{font-size:13px;font-weight:800;color:var(--x);width:50px;text-align:right}
+
+/* ── SLOTS (round history) ── */
+.slots{display:flex;gap:6px;justify-content:center;margin:12px 0 0}
+.slot{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:900;color:#fff;flex:none;
+  border:2px solid transparent}
+.slot.D{background:radial-gradient(circle at 35% 30%,#f2a94e,#a35c17);border-color:#e8963f}
+.slot.T{background:radial-gradient(circle at 35% 30%,#5d96e8,#1d3f7a);border-color:#3b6fc4}
+.slot.X{background:radial-gradient(circle at 35% 30%,#5fd39a,#1d7a4e);color:#06281a;border-color:#35b573}
+.slot.hint{border:1.5px dashed rgba(255,255,255,.15);background:transparent;color:var(--dim);font-size:11px}
+
+/* ── SCOREBOARD ── */
+.scorechips{display:flex;gap:6px;justify-content:center;margin:14px 0 0;flex-wrap:wrap}
+.schip{font-size:11px;font-weight:800;letter-spacing:.4px;color:var(--mut);
+  background:rgba(227,175,80,.06);border:1px solid rgba(227,175,80,.15);
+  border-radius:999px;padding:5px 13px}
+.schip b{color:var(--gold-txt)}
+
+/* ── WHY DETAILS ── */
+.whydet{border:none;margin:8px 0 0;text-align:center;padding:0}
+.whydet summary{display:inline-block;font-size:11px;color:var(--dim);
+  border-bottom:1px dotted var(--dim);cursor:pointer;list-style:none}
+.whydet summary::-webkit-details-marker{display:none}
+.whydet p{font-size:11px;color:var(--dim);line-height:1.6;margin:6px 0 0}
+
+/* ── CARDS ── */
+.card{background:var(--bg2);border:1px solid var(--line);border-radius:16px;
+  padding:14px;margin:0 0 12px}
+.card h3{margin:0 0 10px;font-size:11px;text-transform:uppercase;letter-spacing:1.5px;
+  color:var(--gold);font-weight:800;display:flex;align-items:center;gap:6px}
+.card h3 svg{width:14px;height:14px;color:var(--gold)}
+.card h3 .right{margin-left:auto;color:var(--mut);text-transform:none;letter-spacing:0;
+  font-size:11px;font-weight:600}
+section{display:none;animation:secin .25s ease} section.on{display:block}
+@keyframes secin{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* ── GENERIC ── */
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.note{font-size:12px;color:var(--dim);margin-top:10px;line-height:1.55}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:7px 0;
+  border-bottom:1px solid rgba(255,255,255,.05);font-size:13.5px}
+.kv:last-child{border-bottom:none}
+.kv .k{color:var(--mut)}
+.ok{color:var(--good)} .bad{color:var(--bad)} .wrn{color:var(--warn)}
+.pill{background:rgba(227,175,80,.08);border:1px solid rgba(227,175,80,.15);
+  border-radius:999px;padding:4px 11px;font-size:12px;color:var(--mut)}
+.pill b{color:var(--gold-txt)}
+input[type=number],input[type=text]{background:var(--bg3);border:1px solid var(--line);
+  color:var(--txt);border-radius:10px;padding:10px 12px;font-size:14px;width:110px;outline:none}
+input:focus{border-color:rgba(227,175,80,.5)}
+button.act{background:linear-gradient(135deg,#f5d78e,#e3af50 50%,#b8860b);
+  border:none;color:var(--bg);border-radius:12px;padding:12px 18px;font-weight:900;
+  cursor:pointer;font-size:14px;letter-spacing:.3px;transition:transform .06s;
+  box-shadow:0 4px 14px rgba(227,175,80,.25)}
+button.act:active{transform:scale(.97)}
+button.ghost{background:var(--bg3);border:1px solid var(--line);color:var(--txt);
+  border-radius:12px;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px}
+button.ghost:active{transform:scale(.97)}
+
+/* ── BEADS (history) ── */
+.beads{display:grid;grid-auto-flow:column;grid-template-rows:repeat(6,32px);gap:4px;
+  overflow-x:auto;padding:4px;scrollbar-width:thin}
+.bead{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:800;color:#fff;flex:none;
+  box-shadow:inset 0 2px 3px rgba(255,255,255,.2),inset 0 -2px 4px rgba(0,0,0,.3)}
+.bead.D{background:radial-gradient(circle at 35% 30%,#f2a94e,#a35c17)}
+.bead.T{background:radial-gradient(circle at 35% 30%,#5d96e8,#1d3f7a)}
+.bead.X{background:radial-gradient(circle at 35% 30%,#5fd39a,#1d7a4e);color:#06281a}
+
+/* ── REVEAL POPUP ── */
+#reveal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:80;
+  background:rgba(30,25,34,.7);backdrop-filter:blur(6px)}
+#reveal.show{display:flex;animation:secin .2s ease}
+.revcard{display:flex;align-items:center;justify-content:center}
+.revring{width:180px;height:180px;border-radius:50%;animation:revpop .6s cubic-bezier(.34,1.5,.64,1) both}
+.revring.d{background:radial-gradient(circle at 50% 38%,rgba(190,125,69,.5),rgba(190,125,69,.1) 65%);
+  border:3px solid var(--d);box-shadow:0 0 60px rgba(190,125,69,.4),inset 0 0 30px rgba(190,125,69,.3)}
+.revring.t{background:radial-gradient(circle at 50% 38%,rgba(83,106,165,.5),rgba(83,106,165,.1) 65%);
+  border:3px solid var(--t);box-shadow:0 0 60px rgba(83,106,165,.4),inset 0 0 30px rgba(83,106,165,.3)}
+.revring.x{background:radial-gradient(circle at 50% 38%,rgba(227,175,80,.5),rgba(227,175,80,.1) 65%);
+  border:3px solid var(--x);box-shadow:0 0 60px rgba(227,175,80,.4),inset 0 0 30px rgba(227,175,80,.3)}
+@keyframes revpop{0%{transform:scale(.2);opacity:0}60%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
+.revwin{margin-top:10px;text-align:center;font-size:22px;font-weight:900;letter-spacing:2px;
+  text-shadow:0 4px 20px rgba(0,0,0,.6);animation:winpop .6s cubic-bezier(.34,1.5,.64,1) both .08s}
+@keyframes winpop{0%{transform:scale(.4) translateY(14px);opacity:0;filter:blur(8px)}
+  100%{transform:scale(1) translateY(0);opacity:1;filter:blur(0)}}
+.revwin.d{color:var(--d-txt)} .revwin.t{color:var(--t-txt)} .revwin.x{color:var(--gold-txt)}
+.revsub{margin-top:6px;color:var(--mut);font-size:14px;font-weight:700}
+
+/* ── TOAST ── */
+#toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom));
+  transform:translateX(-50%) translateY(8px);
+  background:var(--bg3);border:1px solid var(--line);color:var(--txt);
+  padding:9px 16px;border-radius:999px;font-size:13px;font-weight:700;
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:50;
+  box-shadow:0 8px 30px rgba(0,0,0,.5);display:flex;gap:8px;align-items:center;
+  max-width:86vw;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── NAV ── */
+nav{position:fixed;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:2px;
+  background:rgba(30,25,34,.95);backdrop-filter:blur(14px);
+  border-top:1px solid var(--line);padding:7px 6px calc(8px + env(safe-area-inset-bottom));z-index:30}
+nav button{flex:1;max-width:120px;background:none;border:none;color:var(--dim);
+  font-size:10px;font-weight:800;padding:7px 2px;border-radius:12px;cursor:pointer;letter-spacing:.5px}
+nav button svg{width:20px;height:20px;display:block;margin:0 auto 3px}
+nav button.on{color:var(--gold);background:rgba(227,175,80,.1);
+  box-shadow:0 0 12px rgba(227,175,80,.1)}
+
+/* ── EMPTY STATE ── */
+.empty{text-align:center;padding:24px 10px 16px;color:var(--mut)}
+.empty svg{width:64px;height:64px;margin-bottom:8px;opacity:.9}
+.empty .t{font-size:14px;font-weight:800;color:var(--txt)}
+.empty .s{font-size:12.5px;margin-top:4px;line-height:1.55}
+
+/* ── MISC ── */
+footer{margin-top:12px;font-size:10.5px;color:var(--dim);text-align:center;line-height:1.7;padding:0 8px}
+footer b{color:var(--mut)}
+.statuspill{display:inline-flex;align-items:center;gap:6px;
+  background:rgba(109,188,97,.1);border:1px solid rgba(109,188,97,.35);color:var(--good);
+  border-radius:999px;padding:4px 10px;font-size:10px;font-weight:800;letter-spacing:1px}
+.statuspill .pulse{width:6px;height:6px;border-radius:50%;background:var(--good);
+  animation:vpulse 1.5s infinite}
+details{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-top:8px}
+details summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--mut);list-style:none}
+details summary::-webkit-details-marker{display:none}
+details[open] summary{color:var(--txt)}
+.msg{font-size:13px;padding:10px 12px;border-radius:10px;margin:8px 0;display:none;line-height:1.5}
+.msg.err{display:block;background:rgba(224,96,96,.1);color:#f0a0a0;border:1px solid rgba(224,96,96,.2)}
+.msg.ok{display:block;background:rgba(109,188,97,.08);color:#8ed482;border:1px solid rgba(109,188,97,.15)}
+.chipsel{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0}
+.chip2{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:800;color:#fff;cursor:pointer;border:2px solid transparent;user-select:none}
+.chip2.D{background:radial-gradient(circle at 35% 30%,#f2a94e,#a35c17)}
+.chip2.T{background:radial-gradient(circle at 35% 30%,#5d96e8,#1d3f7a)}
+.chip2.X{background:radial-gradient(circle at 35% 30%,#f5d78e,#a07820);color:var(--bg)}
+textarea{background:var(--bg3);border:1px solid var(--line);color:var(--txt);
+  border-radius:10px;padding:10px;font-size:14px;width:100%;min-height:70px;resize:vertical}
+.meter{height:7px;background:rgba(255,255,255,.05);border-radius:5px;overflow:hidden;margin:5px 0}
+.meter>div{height:100%;border-radius:5px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:6px 4px;border-bottom:1px solid rgba(255,255,255,.05)}
+th{color:var(--dim);font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:1px}
+td.r,th.r{text-align:right}
+#drop{border:2px dashed var(--line);border-radius:14px;padding:18px;text-align:center;
+  color:var(--mut);cursor:pointer;transition:.2s}
+#drop.hot{border-color:var(--t);color:var(--txt);background:rgba(83,106,165,.05)}
+#drop svg{width:28px;height:28px;margin-bottom:4px;color:var(--gold)}
+.gauge{display:flex;justify-content:center;margin:8px 0 2px}
+.vbig{font-size:18px;font-weight:800;display:flex;align-items:center;gap:8px}
+.vbig .led{width:11px;height:11px;border-radius:50%;box-shadow:0 0 10px currentColor}
+
+  /* ===== THE BRAIN ===== */
+  .brain{background:linear-gradient(135deg,rgba(227,175,80,.12),rgba(83,106,165,.08));
+    border:1.5px solid rgba(227,175,80,.35);border-radius:14px;padding:12px 14px;margin:0 0 12px}
+  .brain-head{display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:2.5px;
+    font-weight:900;color:var(--gold);margin-bottom:8px}
+  .brain-badge{margin-left:auto;font-size:9px;letter-spacing:1.5px;padding:3px 10px;border-radius:999px;
+    background:rgba(227,175,80,.15);color:var(--gold)}
+  .brain-badge.hot{background:rgba(109,188,97,.2);color:var(--good)}
+  .brain-badge.warn{background:rgba(227,175,80,.2);color:var(--warn)}
+  .brain-verdict{font-size:26px;font-weight:900;letter-spacing:1.5px;text-align:center;margin:4px 0}
+  .brain-verdict.bet{color:var(--good);text-shadow:0 0 20px rgba(109,188,97,.4)}
+  .brain-verdict.no{color:var(--bad)}
+  .brain-verdict.wait{color:var(--warn)}
+  .brain-sub{text-align:center;font-size:13px;color:var(--mut);font-weight:700;margin-bottom:8px}
+  .brain-reasons{font-size:12px;color:var(--mut);line-height:1.7}
+  .brain-reasons .r{display:flex;gap:8px;align-items:baseline;padding:2px 0}
+  .brain-reasons .dot{width:6px;height:6px;border-radius:50%;flex:none;transform:translateY(-1px)}
+  .brain-stats{display:flex;justify-content:center;gap:14px;margin-top:10px;font-size:11px;color:var(--dim)}
+  .brain-stats b{color:var(--gold-txt);font-size:13px;display:block;text-align:center}
+
+  /* ===== COIN ANIMATION ===== */
+  @keyframes coinFloat{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-7px) rotate(2deg)}}
+  @keyframes coinFloat2{0%,100%{transform:translateY(0) rotate(2deg)}50%{transform:translateY(-9px) rotate(-2deg)}}
+  @keyframes favPulse{0%,100%{filter:drop-shadow(0 0 10px rgba(246,196,83,.5))}50%{filter:drop-shadow(0 0 24px rgba(246,196,83,.95))}}
+  .coin > svg, .coin img{animation:coinFloat 3.4s ease-in-out infinite}
+  .coin.who-t > svg, .coin.who-t img{animation-name:coinFloat2;animation-duration:3.9s}
+  .coin.fav > svg, .coin.fav img{animation:favPulse 1.6s ease-in-out infinite,coinFloat 3.4s ease-in-out infinite}
+  .coin.fav.who-t > svg, .coin.fav.who-t img{animation:favPulse 1.6s ease-in-out infinite,coinFloat2 3.9s ease-in-out infinite}
+  /* ===== QUICK LOG ===== */
+  .quicklog{display:flex;align-items:center;gap:8px;justify-content:center;margin:10px 0 0}
+  .ql-label{font-size:9px;letter-spacing:1.5px;color:var(--dim);font-weight:800}
+  .ql-btn{flex:1;height:56px;border-radius:14px;border:none;color:#fff;font-weight:900;font-size:18px;cursor:pointer;letter-spacing:1px}
+  .ql-btn.d{background:linear-gradient(180deg,#f2a94e,#a35c17)}
+  .ql-btn.t{background:linear-gradient(180deg,#5d96e8,#1d3f7a)}
+  .ql-btn.x{background:linear-gradient(180deg,#5fd39a,#1d7a4e);color:#06281a;flex:0.6;font-size:22px}
+  .ql-btn:active{transform:scale(.97)}
+  .quicklog{display:flex;align-items:stretch;gap:8px;margin:12px 0 0}
+  .ql-label{display:none}
+  /* ===== BRAIN FOLD ===== */
+  .brain-conf{margin:8px 0 2px}
+  .brain-fold{border:none;margin-top:6px}
+  .brain-fold summary{font-size:10.5px;color:var(--dim);text-align:center;cursor:pointer;list-style:none;letter-spacing:1.5px;font-weight:800}
+  .brain-fold summary::-webkit-details-marker{display:none}
+  .brain-fold summary::after{content:" ▾";font-size:9px}
+  .brain-fold[open] summary::after{content:" ▴"}
+  /* ===== REVEAL v2 ===== */
+  #reveal{overflow:hidden}
+  #glitterField{position:absolute;inset:0;pointer-events:none}
+  .glitter{position:absolute;width:5px;height:5px;border-radius:50%;background:#f6c453;opacity:0;}
+@keyframes glitterPop{0%{opacity:0;transform:scale(0)}30%{opacity:1;transform:scale(1.5)}100%{opacity:0;transform:scale(0)}}
+@keyframes winnerPulse{0%{transform:scale(1)}20%{transform:scale(1.25)}50%{transform:scale(1.1)}80%{transform:scale(1.18)}100%{transform:scale(1)}}
+@keyframes winnerGlow{0%{filter:drop-shadow(0 0 8px rgba(246,196,83,.4))}50%{filter:drop-shadow(0 0 30px rgba(246,196,83,1))}100%{filter:drop-shadow(0 0 8px rgba(246,196,83,.4))}}
+.coin.winner{z-index:5}
+.coin.winner>svg,.coin.winner img{animation:winnerPulse 1.2s ease-out,winnerGlow 1.8s ease-in-out 2!important;transform-origin:center center}
+@keyframes tiePulse{0%{transform:scale(1)}30%{transform:scale(1.2)}60%{transform:scale(1.05)}100%{transform:scale(1)}}
+@keyframes tieGlow{0%{filter:drop-shadow(0 0 8px rgba(53,217,154,.4))}50%{filter:drop-shadow(0 0 25px rgba(53,217,154,.9))}100%{filter:drop-shadow(0 0 8px rgba(53,217,154,.4))}}
+.coin.tie-win{z-index:5}
+.coin.tie-win>svg,.coin.tie-win img{animation:tiePulse 1.2s ease-out,tieGlow 1.8s ease-in-out 2!important;transform-origin:center center}
+.coin-glitter span{pointer-events:none}
+    animation:glit 1.6s ease-out infinite;box-shadow:0 0 8px #f6c453}
+  @keyframes glit{0%{opacity:0;transform:scale(0)}25%{opacity:1;transform:scale(1.4)}100%{opacity:0;transform:scale(.2) translateY(40px)}}
+  .revcoin{width:120px;height:120px;margin:0 auto;position:relative;animation:revpop .5s cubic-bezier(.34,1.5,.64,1) both}
+  .revcoin svg{width:100%;height:100%;filter:drop-shadow(0 0 20px rgba(246,196,83,.3))}
+  .revcoin .rl{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:92px;font-weight:900;color:#fff;text-shadow:0 6px 24px rgba(0,0,0,.6)}
+
+  /* ===== MONEY SIM ===== */
+  .sim{margin:12px 0;background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:12px;padding:12px}
+  .sim-title{font-size:10px;letter-spacing:2.5px;font-weight:900;color:var(--gold);margin-bottom:8px}
+  .sim-start{display:flex;gap:8px}
+  .sim-start input{flex:1;background:var(--bg3);border:1px solid var(--line);color:var(--txt);border-radius:10px;padding:10px;font-size:15px;font-weight:800;outline:none}
+  .sim-bank{font-size:30px;font-weight:900;text-align:center;margin:4px 0}
+  .sim-bank.up{color:var(--good)}.sim-bank.down{color:var(--bad)}
+  .sim-pnl{font-size:13px;font-weight:800}
+  .sim-row{display:flex;justify-content:space-between;font-size:11.5px;color:var(--dim)}
+  .sim-plan{margin-top:8px;text-align:center;font-size:13px;font-weight:800;padding:8px;border-radius:9px;background:rgba(255,255,255,.04)}
+  .sim-plan.skip{color:var(--dim)}
+  .sim-plan.active{color:var(--txt)}
+  .coin img, .coin-art{width:clamp(80px,24vw,110px);height:clamp(80px,24vw,110px);border-radius:50%;box-shadow:0 6px 18px rgba(0,0,0,.5);object-fit:contain;display:block;margin:0 auto}
+
+  .play7{display:flex;gap:6px;justify-content:center;margin:4px 0 10px}
+  .p7{width:36px;height:42px;border-radius:10px;border:1.5px dashed rgba(255,255,255,.18);
+      display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:900;color:var(--dim)}
+  .p7.on.D{background:radial-gradient(circle at 35% 30%,#f2a94e,#a35c17);border-color:#e8963f;color:#fff}
+  .p7.on.T{background:radial-gradient(circle at 35% 30%,#5d96e8,#1d3f7a);border-color:#3b6fc4;color:#fff}
+  .p7.on.X{background:radial-gradient(circle at 35% 30%,#5fd39a,#1d7a4e);border-color:#35b573;color:#06281a}
+  .need7{text-align:center;font-size:12px;font-weight:800;letter-spacing:1px;color:var(--gold);margin:0 0 8px}
+  .need7.ready{color:var(--good)}
+
+  .brain-verdict.d{color:var(--d-txt)!important;text-shadow:0 0 18px rgba(61,111,196,.45)}
+  .brain-verdict.t{color:var(--t-txt)!important;text-shadow:0 0 18px rgba(232,150,63,.45)}
+  .sim-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0}
+  .sim-grid label{font-size:10px;letter-spacing:1px;font-weight:800;color:var(--dim);display:flex;flex-direction:column;gap:4px}
+  .sim-grid input{width:100%}
+  .sim-strats{display:flex;gap:6px;margin-top:8px}
+  .sim-strats .ghost{flex:1;padding:8px 6px;font-size:11px}
+  .sim-strats .ghost.on{border-color:var(--gold);color:var(--gold-txt);background:rgba(227,175,80,.12)}
+  .sim-last{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;justify-content:center}
+  .sim-chip{font-size:11px;font-weight:800;padding:4px 8px;border-radius:8px;background:rgba(255,255,255,.05)}
+  .sim-chip.ok{color:var(--good)} .sim-chip.bad{color:var(--bad)} .sim-chip.wait{color:var(--warn)}
+  .sim-modes{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0 12px}
+  .sim-mode{
+    text-align:left;padding:12px 12px 11px;border-radius:14px;
+    border:1px solid var(--line);background:rgba(255,255,255,.03);
+    cursor:pointer;color:var(--txt);
+  }
+  .sim-mode b{display:block;font-size:12px;letter-spacing:1.6px;margin-bottom:5px;font-weight:900}
+  .sim-mode span{display:block;font-size:11px;color:var(--dim);font-weight:600;line-height:1.4}
+  .sim-mode.on{border-color:var(--gold);background:rgba(227,175,80,.14);color:var(--gold-txt)}
+  .sim-mode.on span{color:var(--mut)}
+  .sim-amtwrap{display:flex;flex-direction:column;gap:6px}
+  .sim-amtwrap label{font-size:10px;letter-spacing:1.4px;font-weight:800;color:var(--dim);text-align:center}
+  .sim-amtwrap input{width:100%;font-size:22px;font-weight:900;text-align:center;padding:12px 10px}
+  .sim-plan.wait{color:var(--warn);background:rgba(227,175,80,.1)}
+  .sim-why{text-align:center;font-size:11px;color:var(--dim);margin-top:4px;font-weight:700;line-height:1.4}
+  .sim-unit{text-align:center;font-size:11px;color:var(--mut);font-weight:700;margin:2px 0 6px}
+  .sim-hint{font-size:11px;color:var(--dim);text-align:center;margin-top:10px;line-height:1.45;font-weight:600}
+  .sim-dd{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);margin-top:4px}
+  .table-label{letter-spacing:2px}
+
+  body{font-family:'SF Pro Text',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+  header h1{font-size:17px;letter-spacing:0}
+  header .sub{letter-spacing:2px;opacity:.85}
+  .table{border-radius:22px;padding:18px 16px 16px}
+  .need7{font-size:11px;letter-spacing:2px;margin-bottom:10px}
+  .play7{margin-bottom:14px}
+  .verdict-zone{padding:12px 0 6px}
+  .vpick{letter-spacing:1px}
+  .quicklog{margin-top:14px}
+  .ql-btn{height:52px;border-radius:16px;font-size:15px;letter-spacing:1.5px}
+  .brain{border-radius:16px}
+  .brain-verdict{font-size:22px;letter-spacing:1px}
+  nav button{font-size:9px;letter-spacing:1px}
+  .livestrip{margin:0 0 14px}
+#s-predict #slots{display:none}
+
+/* ===== HOME v46 — one desk, one call, more air ===== */
+#wrap{padding:0 18px calc(98px + env(safe-area-inset-bottom))}
+header{
+  padding:calc(14px + env(safe-area-inset-top)) 2px 16px;
+  gap:12px; margin-bottom:4px;
+}
+.logo{width:40px;height:40px;border-radius:11px}
+header h1{font-size:16px;font-weight:800}
+header .sub{font-size:8px;letter-spacing:2.4px;margin-top:3px}
+#hstat{
+  font-size:11px;font-weight:700;letter-spacing:.3px;
+  background:rgba(227,175,80,.07);
+  border:1px solid rgba(227,175,80,.16);
+  border-radius:999px; padding:5px 10px 5px 12px;
+}
+button, .ql-btn, .p7{touch-action:manipulation}
+
+#s-predict .table{
+  padding:22px 18px 20px;
+  margin:0 0 20px;
+  border-radius:24px;
+}
+#s-predict .table::before{inset:8px;border-radius:18px;opacity:.7}
+#s-predict .table-label{margin-bottom:14px;letter-spacing:2.2px;font-size:10px}
+
+#s-predict .play7{gap:8px;margin:0 0 18px}
+#s-predict .p7{position:relative;width:38px;height:46px;border-radius:12px}
+#s-predict .need7{margin:0 0 18px;font-size:10px;letter-spacing:2.4px;font-weight:800}
+.p7dot{
+  position:absolute;left:50%;top:calc(100% + 5px);transform:translateX(-50%);
+  width:7px;height:7px;border-radius:50%;pointer-events:none;
+}
+.p7dot.hit{background:#3dcc7a;box-shadow:0 0 6px rgba(61,204,122,.75)}
+.p7dot.miss{background:#e06060}
+.p7dot.tie{background:rgba(255,255,255,.22)}
+
+#s-predict .coinwrap{margin:0 0 18px;gap:6px}
+#s-predict .coin img,
+#s-predict .coin-art{
+  width:clamp(62px,19vw,84px);
+  height:clamp(62px,19vw,84px);
+}
+#s-predict .coin .cw{display:none}
+#s-predict .coin .cp{font-size:13px;margin-top:8px;letter-spacing:.4px}
+#s-predict .coin .sig{top:-8px;font-size:8px;padding:3px 10px;letter-spacing:1.4px}
+#s-predict .vs-badge{width:30px;height:30px;font-size:10px;box-shadow:0 0 10px rgba(227,175,80,.28)}
+
+#s-predict .quicklog{margin:0;gap:10px;position:relative;z-index:5}
+#s-predict .ql-btn{height:48px;border-radius:14px;font-size:13px;letter-spacing:2px;pointer-events:auto;position:relative;z-index:5}
+.undo-row{display:flex;justify-content:center;margin:8px 0 0}
+.undo-row .ghost{
+  background:transparent;border:none;color:var(--dim);
+  font-size:11px;letter-spacing:1.6px;font-weight:800;
+  padding:6px 14px;
+}
+
+.callband{
+  margin-top:18px; padding-top:18px;
+  border-top:1px solid rgba(227,175,80,.14);
+  text-align:center;
+}
+.callband .vlab{font-size:10px;letter-spacing:3.2px;margin-bottom:4px}
+.callband .vpick{
+  font-size:clamp(28px,8.4vw,40px);
+  margin:0 0 8px; letter-spacing:1.5px; line-height:1.05;
+}
+.callband-meta{
+  display:flex; justify-content:center; align-items:center;
+  gap:8px; flex-wrap:wrap;
+  font-size:12px; font-weight:700; color:var(--mut);
+}
+.callband-meta .dtclone-line{margin:0}
+.callband-meta .sep{color:var(--dim);font-weight:800}
+.callband .vpct{font-size:12px;color:var(--mut);font-weight:700}
+#s-predict .brain-conf{margin:14px auto 0; max-width:240px}
+#s-predict .vtag,
+#s-predict .tierow,
+#s-predict .whydet,
+#s-predict #slots{display:none !important}
+
+#s-predict .brain{
+  padding:14px 16px 10px;
+  margin:0 0 20px;
+  border-radius:18px;
+  background:rgba(227,175,80,.05);
+  border:1px solid rgba(227,175,80,.2);
+}
+#s-predict .brain-head{margin-bottom:2px}
+#s-predict .brain-verdict{display:block;text-align:center;font-size:22px;margin:6px 0 2px}
+#s-predict .brain-sub{
+  text-align:center; font-size:13px; font-weight:700;
+  margin:2px 0 8px; color:var(--mut); line-height:1.45;
+}
+#s-predict .brain-conf{margin:8px auto 10px; max-width:240px}
+.brain-toggle{
+  display:block;width:100%;
+  background:transparent !important;
+  color:var(--dim) !important;
+  border:none !important;
+  box-shadow:none !important;
+  outline:none;
+  font-size:10.5px;letter-spacing:1.4px;font-weight:800;
+  text-align:left;padding:8px 0;cursor:pointer;
+  font-family:inherit;
+  -webkit-appearance:none;appearance:none;
+}
+.brain-toggle.on{color:var(--gold)!important}
+.brain-toggle::after{content:" ▾";font-size:9px;color:var(--dim)}
+.brain-toggle.on::after{content:" ▴"}
+.brain-panel{padding-bottom:4px}
+#s-predict .scorechips{
+  justify-content:flex-start; margin:12px 0 0; gap:6px;
+}
+#s-predict .schip{padding:4px 10px; font-size:10.5px}
+.brain-foot{font-size:11px;color:var(--dim);line-height:1.55;margin:12px 0 4px}
+
+#s-predict .sim{
+  margin:0 0 8px; padding:16px;
+  border-radius:18px; background:var(--bg2);
+  border:1px solid var(--line);
+}
+#s-predict .sim-title{display:block; margin-bottom:12px}
+#s-predict .sim-bank{font-size:26px; margin:0 0 8px}
+#s-predict .sim-grid{margin:0 0 4px}
+#s-predict .sim .note{display:none}
+#s-predict .sim .sim-hint{display:block}
+#s-predict .sim-plan{margin-top:10px}
+#s-predict .sim svg{height:28px !important}
+
+.tape{margin:16px 0 0}
+.tape-lab{font-size:10px;letter-spacing:1.6px;font-weight:800;color:var(--dim);margin-bottom:8px}
+.tape-lab b{color:var(--gold-txt);letter-spacing:0}
+.tape-row{display:flex;gap:3px;justify-content:center}
+.tape-cell{
+  width:13px;height:22px;border-radius:4px;flex:none;
+  font-size:8px;font-weight:900;letter-spacing:0;
+  display:flex;align-items:center;justify-content:center;
+  color:rgba(255,255,255,.92);
+}
+.tape-cell.hit{background:#2f9e5f;box-shadow:0 0 8px rgba(47,158,95,.35)}
+.tape-cell.miss{background:#c44c4c}
+.tape-cell.tie{background:rgba(255,255,255,.12);color:var(--dim)}
+.tape-cell.wait{background:rgba(255,255,255,.06)}
+
+.p7.next{border-color:rgba(227,175,80,.55);color:var(--gold);box-shadow:0 0 10px rgba(227,175,80,.18)}
+.sim-presets{display:flex;gap:6px;margin-top:8px}
+.sim-presets .ghost{flex:1;padding:8px 4px;font-size:11px}
+.sim-busted{text-align:center;color:var(--bad);font-weight:900;letter-spacing:2px;margin:10px 0 0;font-size:12px}
+/* PHASE 3: Table selector buttons */
+.tbl-btn{
+  font-size:9px;font-weight:800;letter-spacing:1px;
+  padding:4px 10px;border-radius:999px;cursor:pointer;
+  background:rgba(227,175,80,.06);border:1px solid rgba(227,175,80,.15);
+  color:var(--dim);transition:.15s;
+}
+.tbl-btn.on{background:rgba(227,175,80,.18);border-color:rgba(227,175,80,.4);color:var(--gold-txt)}
+.tbl-btn:active{transform:scale(.95)}
+
+/* PHASE 4: Professional UI */
+#s-predict .quicklog, .undo-row { display: none !important; }
+#s-predict .coin .cw { display: none; }
+#s-predict .coin .cp { font-size: 14px; margin-top: 6px; letter-spacing: .3px; }
+#s-predict .coin .sig { top: -8px; font-size: 8px; padding: 3px 10px; letter-spacing: 1.4px; }
+#s-predict .coinwrap { margin: 0 0 12px; gap: 8px; }
+#s-predict .coin img, #s-predict .coin-art { width: clamp(56px, 17vw, 76px); height: clamp(56px, 17vw, 76px); }
+#s-predict .vs-badge { width: 28px; height: 28px; font-size: 9px; }
+#s-predict .play7 { gap: 7px; margin: 0 0 10px; }
+#s-predict .p7 { width: 34px; height: 40px; border-radius: 10px; font-size: 13px; }
+#s-predict .need7 { margin: 0 0 12px; font-size: 9px; letter-spacing: 2.5px; }
+#s-predict .brain { padding: 14px 16px 10px; margin: 12px 0 16px; border-radius: 18px; }
+#s-predict .brain-head { margin-bottom: 2px; }
+#s-predict .brain-verdict { font-size: 22px; letter-spacing: 1px; }
+#s-predict .brain-sub { font-size: 12px; margin: 2px 0 6px; }
+#s-predict .brain-conf { margin: 6px auto 8px; max-width: 200px; }
+#s-predict .sim { margin: 0 0 12px; padding: 14px; border-radius: 18px; }
+
+.tbl-btn { font-size: 8px !important; padding: 3px 8px !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .coin > svg, .coin img, .coin.fav > svg, .coin.fav img,
+  .coin.who-t > svg, .coin.who-t img { animation: none; }
+}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 64 64" width="44" height="44" aria-hidden="true">
+        <rect width="64" height="64" fill="#1e1922"/>
+        <rect width="28" height="64" fill="#e8963f"/><rect x="36" width="28" height="64" fill="#3b6fc4"/>
+        <rect x="28" width="8" height="64" fill="#e3af50"/>
+        <circle cx="32" cy="32" r="12" fill="#1e1922" opacity=".9"/>
+        <text x="32" y="36" text-anchor="middle" font-size="11" font-weight="900" fill="#e3af50" font-family="Arial">vs</text>
+      </svg>
+    </div>
+    <div>
+      <h1>DvT <span>Predictor</span></h1>
+      
+    </div>
+    
+  </header>
+
+  <!-- PREDICT / HOME -->
+  <section id="s-predict" class="on">
+    <!-- Live Status Strip (same as Live tab) -->
+    <div class="livestrip" id="predictStrip">
+      <span class="warn" id="predictDot" style="width:8px;height:8px;border-radius:50%;flex:none"></span>
+      <span class="ltext" id="predictText">Waiting for feed…</span>
+      <div class="ringwrap" id="predictRing">
+        <svg width="36" height="36" viewBox="0 0 36 36">
+          <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="3"/>
+          <circle id="predictRingBar" cx="18" cy="18" r="14" fill="none" stroke="#6dbc61" stroke-width="3"
+            stroke-linecap="round" stroke-dasharray="87.96" stroke-dashoffset="0"/>
+        </svg>
+        <div class="ph bet" id="predictRingPh">--</div>
+      </div>
+    </div>
+
+    <div class="table">
+      <!-- Coins -->
+      <div class="coinwrap">
+        <div class="coin who-d" id="coinD">
+          <img src="dragon-coin.png" alt="Dragon" class="coin-art" width="110" height="110">
+          <div class="cp" id="cpD">46.3%</div><div class="sig">PICK</div>
+        </div>
+        <div class="vs-badge">VS</div>
+        <div class="coin who-t" id="coinT">
+          <img src="tiger-coin.png" alt="Tiger" class="coin-art" width="110" height="110">
+          <div class="cp" id="cpT">46.3%</div><div class="sig">PICK</div>
+        </div>
+      </div>
+
+      <!-- Prediction Call -->
+      <div class="callband" style="margin-top:12px;padding-top:14px;border-top:1px solid rgba(227,175,80,.12)">
+        <div class="vlab" style="font-size:9px;letter-spacing:3px">PREDICTION</div>
+        <div class="vpick" id="vpick" style="font-size:clamp(28px,9vw,42px);margin:4px 0 6px">—</div>
+        <div style="display:flex;justify-content:center;align-items:center;gap:6px;flex-wrap:wrap;font-size:11px;font-weight:700;color:var(--mut)">
+          <span id="dtCloneLine">DT Clone · —</span>
+          <span style="color:var(--dim)">·</span>
+          <span id="vpct">waiting for data</span>
+        </div>
+        <div class="vtag" id="vtag" style="display:none"></div>
+      </div>
+
+      <!-- Last 7 Rounds (below prediction) -->
+      <div style="text-align:center;margin:14px 0 4px">
+        <div style="font-size:9px;letter-spacing:2.5px;color:var(--dim);font-weight:800;margin-bottom:8px">LIVE ROUNDS <span id="basis" style="color:var(--mut);letter-spacing:0;font-weight:600"></span></div>
+        <div class="play7" id="play7"></div>
+        <div class="need7" id="need7">WAITING FOR LIVE DATA</div>
+      </div>
+
+      <!-- Intelligence Bar -->
+      <div style="margin:14px 0 4px">
+        <div style="display:flex;gap:6px;font-size:10px;font-weight:800;letter-spacing:.8px;color:var(--dim);justify-content:center;flex-wrap:wrap;margin-bottom:8px">
+          <span id="rounds-pill" style="background:rgba(227,175,80,.1);border:1px solid rgba(227,175,80,.2);border-radius:999px;padding:4px 10px;color:var(--gold-txt)">0 rounds</span>
+          <span id="sessionInfo" style="background:rgba(83,106,165,.1);border:1px solid rgba(83,106,165,.2);border-radius:999px;padding:4px 10px">--</span>
+        </div>
+        <div id="streakInfo" style="display:none;text-align:center;font-size:11px;font-weight:800;letter-spacing:1px;margin-bottom:6px"></div>
+        <div id="ratioBar" style="display:none;padding:0 4px;margin-bottom:6px"></div>
+        <div id="confGauge" style="display:flex;justify-content:center;margin:2px 0"></div>
+        <span id="shoeInfo" style="display:none"></span>
+      </div>
+
+      <!-- Tie Bar -->
+      <div class="tierow" style="margin:8px 4px 0">
+        <span class="tlab" style="font-size:9px">TIE</span>
+        <div class="tiebar" style="height:10px"><div id="tieFill"></div></div>
+        <span class="tp" id="tiePct" style="font-size:11px;width:40px">7.5%</span>
+      </div>
+      <div class="slots" id="slots" style="display:none"></div>
+    </div>
+
+    <!-- Brain Card -->
+    <div class="brain" id="brainCard">
+      <div class="brain-head">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4c-2.5.5-4 2.5-4 5 0 1.5.5 2.5 1.5 3.5-.5 3 1.5 5.5 4.5 5.5h4c3 0 5-2.5 4.5-5.5 1-1 1.5-2 1.5-3.5 0-2.5-1.5-4.5-4-5a4 4 0 0 0-4-4z"/></svg>
+        <span style="letter-spacing:2px">BRAIN</span>
+        <span class="brain-badge" id="brainBadge">LEARNING</span>
+      </div>
+      <div class="brain-verdict" id="brainVerdict">COLLECTING DATA</div>
+      <div class="brain-sub" id="brainSub">Reading the online table…</div>
+      <div class="brain-conf" id="brainConf"></div>
+      <button type="button" class="brain-toggle" id="brainToggle">Why this call</button>
+      <div class="brain-panel" id="brainPanel" hidden>
+        <div class="brain-reasons" id="brainReasons"></div>
+        <div class="scorechips" id="scoreChips"></div>
+        <p class="brain-foot">Engine votes: DT Clone, table heat, streaks, 4-grams, recovery patterns.</p>
+      </div>
+    </div>
+
+    <!-- Money Sim -->
+    <div class="sim" id="simCard"></div>
+  </section>
+
+  <!-- LIVE -->
+  <section id="s-live">
+    <div class="table">
+      <div class="table-label">Live table <span class="statuspill right" id="liveStatusPill"><span class="pulse"></span><span id="liveStatusTxt">LIVE</span></span></div>
+      <div class="livestrip" id="liveStrip">
+        <span class="warn" id="liveDot" style="width:8px;height:8px;border-radius:50%;flex:none"></span>
+        <span class="ltext" id="liveText">Waiting for feed…</span>
+        <div class="ringwrap" id="ringWrap">
+          <svg width="36" height="36" viewBox="0 0 36 36">
+            <circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="3"/>
+            <circle id="ringBar" cx="18" cy="18" r="14" fill="none" stroke="#6dbc61" stroke-width="3"
+              stroke-linecap="round" stroke-dasharray="87.96" stroke-dashoffset="0"/>
+          </svg>
+          <div class="ph bet" id="ringPh">--</div>
+        </div>
+      </div>
+      <div id="liveBody"></div>
+      <details style="margin-top:12px">
+        <summary>Connection Settings</summary>
+        <div class="row" style="margin-top:8px">
+          <input type="text" id="liveUrl" placeholder="watcher URL" style="flex:1;width:auto" aria-label="watcher url">
+          <button class="act" id="liveSave" style="padding:10px 14px">Save</button>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <div class="note" style="margin:0 0 8px;color:var(--warn)">Close the game app completely first (swipe it away), then:</div>
+          <button class="act" id="autoReconnect" style="width:100%;margin-bottom:8px">Reconnect 24/7 Recorder</button>
+          <button class="ghost" id="refreshPick" style="flex:1">Or Upload Capture</button>
+          <input type="file" id="refreshFile" accept=".pcap" style="display:none">
+        </div>
+        <div class="msg" id="refreshMsg"></div>
+      </details>
+      <div class="note">The 24/7 recorder runs inside Cloudflare — fully automatic. If sessions expire, upload a fresh 2-minute capture above to resume instantly.</div>
+    </div>
+  </section>
+
+  <!-- HISTORY -->
+  <section id="s-history">
+    <div class="card">
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a4 4 0 0 0-4 4c-2.5.5-4 2.5-4 5 0 1.5.5 2.5 1.5 3.5-.5 3 1.5 5.5 4.5 5.5h4c3 0 5-2.5 4.5-5.5 1-1 1.5-2 1.5-3.5 0-2.5-1.5-4.5-4-5a4 4 0 0 0-4-4z"/></svg>
+        Brain Learning</h3>
+      <div id="brainLearnBody"></div>
+    </div>
+    <div class="card">
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        Strategy Analysis</h3>
+      <div id="strategyBody"></div>
+    </div>
+    <div class="card">
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+        Pattern Explorer</h3>
+      <div id="patternBody"></div>
+    </div>
+    <details class="card">
+      <summary>Bulk Import / OCR</summary>
+      <div style="margin-top:10px">
+        <textarea id="pasteBox" placeholder="Paste: D D T D = T"></textarea>
+        <div class="msg" id="pasteMsg"></div>
+        <div class="row" style="margin-top:8px">
+          <button class="act" id="pasteAdd" disabled style="flex:1">Add rounds</button>
+        </div>
+        <div id="drop" role="button" tabindex="0" style="margin-top:12px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M8 14l3-4 3 2 2-3"/><circle cx="9" cy="8.5" r="1.3" fill="currentColor" stroke="none"/></svg>
+          <div>Import game screenshot (OCR)</div>
+        </div>
+        <input type="file" id="file" accept="image/*" style="display:none">
+        <img id="ocrImg" style="display:none;max-width:100%;border-radius:10px;margin-top:10px">
+        <div class="meter" id="prog" style="display:none"><div style="background:var(--gold)"></div></div>
+        <div class="msg" id="ocrMsg"></div>
+        <button class="act" id="runOcr" style="display:none;width:100%;margin-top:8px">Run OCR</button>
+        <div class="chipsel" id="chips" style="display:none"></div>
+        <button class="act" id="appendOcr" style="display:none;width:100%;margin-top:8px">Append</button>
+        <div class="row" style="margin-top:12px">
+          <button class="ghost" id="vidPick" style="flex:1">Import video recording</button>
+          <input type="file" id="vidFile" accept="video/*" style="display:none">
+        </div>
+        <div class="msg" id="vidMsg"></div>
+      </div>
+    </details>
+  </section>
+
+  <!-- MORE -->
+  <section id="s-more">
+    <div class="card">
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>
+        Game Check</h3>
+      <div id="verdictBody"></div>
+      <details><summary>Full statistics</summary><div id="advStats" style="margin-top:8px"></div></details>
+    </div>
+    
+    <div class="card">
+      <h3>Today</h3>
+      <div id="digestBody"></div>
+    </div>
+    <div class="card">
+      <h3>Brain cloud</h3>
+      <div class="note" style="margin:0 0 8px">Memory syncs to Cloudflare automatically. You can also download a copy.</div>
+      <div class="row">
+        <button class="ghost" id="expBrain">Download memory</button>
+        <button class="ghost" id="impBrain">Restore memory</button>
+        <input type="file" id="impBrainFile" accept=".json" style="display:none">
+      </div>
+      <div class="msg" id="brainMsg"></div>
+    </div>
+    <div class="card">
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/></svg>
+        Your Data</h3>
+      <div id="storage"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost" id="expJson">Backup</button>
+        <button class="ghost" id="expCsv">CSV</button>
+        <button class="ghost" id="impJson">Restore</button>
+        <input type="file" id="impFile" accept=".json" style="display:none">
+      </div>
+      <div class="msg" id="dataMsg"></div>
+      <button class="ghost" id="wipe" style="margin-top:8px;color:var(--bad);border-color:rgba(224,96,96,.25)">Delete all rounds</button>
+    </div>
+    <div class="card">
+      <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings</h3>
+      <div class="kv">
+        <span class="k">Sound alerts</span>
+        <button class="ghost" id="soundToggleBtn" onclick="toggleSound()" style="min-width:60px">ON</button>
+      </div>
+      <div class="kv">
+        <span class="k">Live feed URL</span>
+        <input type="text" id="liveUrl2" style="flex:1;font-size:11px;padding:4px 8px;background:var(--bg3);border:1px solid var(--line);border-radius:6px;color:var(--txt)" autocomplete="off">
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="ghost" id="liveSave2" style="flex:1">Save feed URL</button>
+      </div>
+      <div class="kv" style="margin-top:8px">
+        <span class="k">App version</span>
+        <span>v60 Phase 4</span>
+      </div>
+    </div>
+    <footer>
+      <b>18+ · Educational tool</b><br>
+      Fair RNG ⇒ no tool beats 50/50 calls · House edge 3.73%<br>
+      Apps promising 90%+ accuracy are scams
+    </footer>
+  </section>
+
+  <div id="reveal"><div id="glitterField"></div><div><div class="revcard" id="revCard"></div>
+    <div class="revwin" id="revWin"></div><div class="revsub" id="revSub"></div></div></div>
+  <div id="toast" aria-live="polite"></div>
+</div>
+
+<nav>
+  <button data-t="predict" class="on" aria-label="Predict">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.5" fill="currentColor" stroke="none"/></svg>PREDICT</button>
+  <button data-t="live" aria-label="Live">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4"/><path d="M12 16h.01"/><circle cx="12" cy="12" r="9"/></svg>LIVE</button>
+  <button data-t="history" aria-label="Strategy">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M7 8h10M7 12h10M7 16h6"/></svg>STRATEGY</button>
+  <button data-t="more" aria-label="More">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>MORE</button>
+</nav>
+
+<script src="engine.js?v=56"></script>
+<script src="app.js?v=56"></script>
+<script>
+// === DEBUG PANEL (visible on screen, no adb needed) ===
+(function() {
+  var dbg = document.createElement('div');
+  dbg.id = '__connDebug';
+  dbg.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:rgba(0,0,0,.92);color:#0f0;font:11px/1.5 monospace;padding:8px 10px;max-height:45vh;overflow-y:auto;border-bottom:2px solid #0f0;display:none';
+  document.body.appendChild(dbg);
+  
+  var logs = [];
+  var maxLogs = 50;
+  var visible = false;
+  
+  window.__connLog = function(msg) {
+    logs.push(msg);
+    if (logs.length > maxLogs) logs.shift();
+    if (visible) {
+      dbg.textContent = logs.join('\n');
+      dbg.scrollTop = dbg.scrollHeight;
+    }
+  };
+  
+  window.__updateConnStatus = function(s) {
+    window.__connStatus = s;
+    window.__connLog('STATUS: connected=' + s.connected + ' rounds=' + s.rounds + ' frames=' + s.frames + ' rframes=' + s.roundFrames + ' uptime=' + s.uptime + 's sinceRound=' + s.sinceRound + 's');
+  };
+  
+  // Toggle debug panel by tapping header 5 times
+  var tapCount = 0, tapTimer = null;
+  var hdr = document.querySelector('header');
+  if (hdr) {
+    hdr.addEventListener('click', function() {
+      tapCount++;
+      clearTimeout(tapTimer);
+      tapTimer = setTimeout(function() { tapCount = 0; }, 1000);
+      if (tapCount >= 5) {
+        tapCount = 0;
+        visible = !visible;
+        dbg.style.display = visible ? 'block' : 'none';
+        if (visible) {
+          dbg.textContent = logs.join('\n');
+          dbg.scrollTop = dbg.scrollHeight;
+        }
+      }
+    });
+  }
+})();
+
+// === NATIVE ROUND INGESTION ===
+window.ingestNativeRound = function(data) {
+  var rounds = data;
+  if (rounds && rounds.rounds && Array.isArray(rounds.rounds)) rounds = rounds.rounds;
+  if (!Array.isArray(rounds) || !rounds.length) return;
+  
+  window.__connLog('INGEST: ' + rounds.length + ' rounds — ' + rounds.map(function(r){return r.winner + '(' + r.dragon + 'v' + r.tiger + ')'}).join(', '));
+  
+  if (typeof ingestFeedList === 'function') {
+    ingestFeedList(rounds.map(function(r) {
+      return { ts: r.ts || Math.floor(Date.now()/1000), winner: r.winner, dragon: r.dragon, tiger: r.tiger, src: 'live' };
+    }));
+    // Mark feed as healthy so app shows LIVE not FEED UNREACHABLE
+    if (window.liveState) { window.liveState.ok = true; window.liveState.lastCheck = Date.now(); }
+    window.__connLog('OK: rounds injected into app, liveState.ok=true');
+  } else {
+    window.__connLog('ERROR: ingestFeedList not found!');
+  }
+};
+
+// Keep liveState.ok = true while native connection is active
+setInterval(function() {
+  var s = window.__connStatus;
+  if (s && s.connected && window.liveState) {
+    window.liveState.ok = true;
+    window.liveState.lastCheck = Date.now();
+  }
+}, 2000);
+</script>
+</body>
+</html>

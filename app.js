@@ -52,7 +52,7 @@
   let _autoDesk = true;
   function autoFillDesk() {
     if (!_autoDesk) return;
-    const live = rounds.filter(function(r) { return r.src === 'live'; });
+    const live = getTableRounds().filter(function(r) { return r.src === 'live'; });
     if (live.length < 7) return;
     const last7live = live.slice(-7);
     const incoming = last7live.map(function(r) { return r.o; });
@@ -233,7 +233,7 @@
 
   /* ========== PHASE 2: Hot/Cold Streak Indicator ========== */
   function getStreakInfo() {
-    var dec = rounds.filter(function(r) { return r.o !== 'X'; }).map(function(r) { return r.o; });
+    var dec = getTableRounds().filter(function(r) { return r.o !== 'X'; }).map(function(r) { return r.o; });
     if (!dec.length) return { side: null, len: 0, hot: false };
     var side = dec[dec.length - 1];
     var len = 0;
@@ -246,7 +246,7 @@
   /* ========== PHASE 2: Recent D/T Ratio Bar ========== */
   function getRecentRatio(n) {
     n = n || 20;
-    var slice = rounds.slice(-n);
+    var slice = getTableRounds().slice(-n);
     var d = 0, t = 0, x = 0;
     slice.forEach(function(r) { if (r.o === 'D') d++; else if (r.o === 'T') t++; else x++; });
     return { d: d, t: t, x: x, n: slice.length, dPct: slice.length ? Math.round(d/slice.length*100) : 0, tPct: slice.length ? Math.round(t/slice.length*100) : 0 };
@@ -262,17 +262,19 @@
 
   /* ========== PHASE 3: Multi-Table ========== */
   var currentTable = 'auto';
+  var brainVault = {};
   function selectTable(btn) {
     document.querySelectorAll('.tbl-btn').forEach(function(b) { b.classList.remove('on'); });
     btn.classList.add('on');
     currentTable = btn.dataset.tbl;
-    toast('Table: ' + (currentTable === 'auto' ? 'ALL' : 'T' + currentTable));
-    // Tag future rounds with table info
+    toast('Table: ' + (currentTable === 'auto' ? 'PICK A TABLE' : 'T' + currentTable));
     if (PERSIST) { try { localStorage.setItem('dvt.table', currentTable); } catch(e) {} }
-    // Update label
     var label = document.getElementById('activeTableLabel');
-    if (label) label.textContent = currentTable === 'auto' ? 'ALL' : 'T' + currentTable;
-    // Re-render
+    if (label) label.textContent = currentTable === 'auto' ? 'SELECT' : 'T' + currentTable;
+    var bar = document.getElementById('predictTableLabel');
+    if (bar) bar.textContent = currentTable === 'auto' ? 'SELECT TABLE' : 'TABLE T' + currentTable;
+    try { bindBrainVault(); brainCatchup(); } catch(e) {}
+    try { autoFillDesk(); } catch(e) {}
     try { render(); } catch(e) {}
   }
   // Export to window so HTML onclick handlers work
@@ -295,7 +297,7 @@
           btn.classList.add('on');
         }
         var label = document.getElementById('activeTableLabel');
-        if (label) label.textContent = currentTable === 'auto' ? 'ALL' : 'T' + currentTable;
+        if (label) label.textContent = currentTable === 'auto' ? 'SELECT' : 'T' + currentTable;
       }
     } catch(e) {}
   })();
@@ -310,7 +312,7 @@
         tblIndices.push(i);
       }
     }
-    if (tblIndices.length < 3) return playWin.slice(-7); // fallback
+    if (tblIndices.length < 3) return [];
     // Map round indices to playWin outcomes
     var tblOutcomes = tblIndices.map(function(idx) { return playWin[idx]; }).filter(function(o) { return o != null; });
     return tblOutcomes.slice(-7);
@@ -321,8 +323,8 @@
     const tblRounds = rounds.filter(function(r) { 
       return r.tbl === currentTable || r.tbl === parseInt(currentTable) || String(r.tbl) === String(currentTable);
     }).slice(-7);
-    if (tblRounds.length >= 3) return tblRounds.map(function(r) { return r.o; });
-    return last7(); // Fallback to all rounds if not enough for this table
+    if (tblRounds.length) return tblRounds.map(function(r) { return r.o; });
+    return [];
   }
 
   // Get rounds filtered by selected table (for Brain/engine)
@@ -333,7 +335,7 @@
     });
   }
   function sameTable(r) {
-    if (!currentTable || currentTable === 'auto') return true;
+    if (!currentTable || currentTable === 'auto') return false;
     if (!r) return false;
     return r.tbl === currentTable || r.tbl === parseInt(currentTable) || String(r.tbl) === String(currentTable);
   }
@@ -478,57 +480,84 @@
   const MEM_KEY = 'dvt.brainmem';
   function emptyMem() {
     return {
-      v: 2, trained: 0, hits: 0, atts: 0, lossRun: 0, lastPick: null,
+      v: 3, trained: 0, hits: 0, atts: 0, lossRun: 0, lastPick: null,
       grams2: {}, grams3: {}, grams4: {},
       recov: { '0': { D: 0, T: 0, X: 0, n: 0 }, '1': { D: 0, T: 0, X: 0, n: 0 }, '2': { D: 0, T: 0, X: 0, n: 0 }, '3': { D: 0, T: 0, X: 0, n: 0 } },
       methods: { clone: { h: 0, a: 0 }, gram: { h: 0, a: 0 }, gram4: { h: 0, a: 0 } },
-      /* PHASE 3: Pattern decay — older patterns get less weight */
       decayFactor: 0.98,
-      /* PHASE 3: Side balance tracking */
-      sideBalance: { D: 0, T: 0, X: 0, n: 0 }
+      sideBalance: { D: 0, T: 0, X: 0, n: 0 },
+      tableKey: null,
+      liveOnly: true
     };
+  }
+  function cloneMem(src) {
+    var m = emptyMem();
+    if (!src) return m;
+    try { m = Object.assign(m, JSON.parse(JSON.stringify(src))); } catch (e) {
+      for (var k in src) if (k !== 'vault') m[k] = src[k];
+    }
+    m.grams2 = m.grams2 || {}; m.grams3 = m.grams3 || {}; m.grams4 = m.grams4 || {};
+    return m;
+  }
+  function tableBrainKey() {
+    if (!currentTable || currentTable === 'auto') return null;
+    return String(currentTable);
   }
   let MEM = emptyMem();
   (function () {
     if (!PERSIST) return;
     try {
       const j = JSON.parse(localStorage.getItem(MEM_KEY) || 'null');
-      if (j && j.v === 1) {
-        MEM = emptyMem();
-        for (const k in j) MEM[k] = j[k];
-        MEM.recov = Object.assign(emptyMem().recov, j.recov || {});
-        MEM.grams2 = j.grams2 || {};
-        MEM.grams3 = j.grams3 || {};
+      if (j && j.vault && typeof j.vault === 'object') {
+        brainVault = j.vault;
+      } else if (j && (j.v === 1 || j.v === 2) && (j.trained || 0) > 0) {
+        /* legacy mixed brain — quarantine, do not use as live memory */
+        try { localStorage.setItem('dvt.brainmem.legacy', JSON.stringify(j)); } catch (e) {}
+        brainVault = {};
       }
     } catch (e) { }
   })();
+  function bindBrainVault() {
+    var k = tableBrainKey();
+    if (!k) { MEM = emptyMem(); MEM.tableKey = null; return; }
+    if (!brainVault[k]) brainVault[k] = emptyMem();
+    brainVault[k].tableKey = k;
+    MEM = brainVault[k];
+  }
   function saveMem() {
     if (!PERSIST) return;
-    try { localStorage.setItem(MEM_KEY, JSON.stringify(MEM)); } catch (e) { }
+    try {
+      var k = tableBrainKey();
+      if (k) { MEM.tableKey = k; brainVault[k] = MEM; }
+      localStorage.setItem(MEM_KEY, JSON.stringify({ v: 3, vault: brainVault, active: currentTable }));
+    } catch (e) { }
     clearTimeout(saveMem._t);
-    saveMem._t = setTimeout(pushBrainCloud, 2000);
+    saveMem._t = setTimeout(pushBrainCloud, 2500);
   }
   const BRAIN_CLOUD = 'https://dvt-watcher.sahib3636.workers.dev/brain';
   const BRAIN_KEY = 'dvt-refresh-9f27';
   async function pushBrainCloud() {
     try {
-      await fetch(BRAIN_CLOUD, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Key': BRAIN_KEY }, body: JSON.stringify(MEM) });
+      var payload = { v: 3, vault: brainVault, active: currentTable, ts: Date.now() };
+      await fetch(BRAIN_CLOUD, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Key': BRAIN_KEY }, body: JSON.stringify(payload) });
     } catch (e) { }
   }
   async function pullBrainCloud() {
     try {
       const j = await (await fetch(BRAIN_CLOUD, { cache: 'no-store' })).json();
-      if (j && j.v >= 1 && (j.trained || 0) >= (MEM.trained || 0) && !j.empty) {
-        const next = emptyMem();
-        for (const k in j) next[k] = j[k];
-        next.recov = Object.assign(emptyMem().recov, j.recov || {});
-        next.grams2 = j.grams2 || {};
-        next.grams3 = j.grams3 || {};
-        next.grams4 = j.grams4 || {};
-        next.sideBalance = j.sideBalance || { D: 0, T: 0, X: 0, n: 0 };
-        MEM = next;
-        if (PERSIST) try { localStorage.setItem(MEM_KEY, JSON.stringify(MEM)); } catch (e) { }
+      if (!j || j.empty) return;
+      if (j.v === 3 && j.vault && typeof j.vault === 'object') {
+        Object.keys(j.vault).forEach(function (k) {
+          var remote = j.vault[k];
+          var local = brainVault[k];
+          if (!remote || typeof remote !== 'object') return;
+          if (!local || (remote.trained || 0) > (local.trained || 0)) brainVault[k] = cloneMem(remote);
+        });
+        bindBrainVault();
+        saveMem();
+        return;
       }
+      /* refuse legacy mixed brains — they poison table isolation */
     } catch (e) { }
   }
   function bumpRow(map, key, o) {
@@ -573,8 +602,13 @@
   }
 
   /* Incremental train: call AFTER a new outcome is already in `rounds`. */
-  function brainObserve(o) {
-    const hist = getTableRounds();
+  function brainObserve(o, rec) {
+    if (!tableBrainKey()) return;
+    if (rec && rec.src && rec.src !== 'live') return;
+    if (rec && !sameTable(rec)) return;
+    if (o === 'X') { saveMem(); return; }
+    bindBrainVault();
+    const hist = getTableRounds().filter(function (r) { return r.src === 'live'; });
     const dec = hist.filter(r => r.o !== 'X').map(r => r.o);
     if (dec.length >= 3) bumpRow(MEM.grams2, dec.slice(-3, -1).join(''), o);
     if (dec.length >= 4) bumpRow(MEM.grams3, dec.slice(-4, -1).join(''), o);
@@ -625,7 +659,9 @@
   }
 
   function brainCatchup() {
-    const hist = getTableRounds();
+    if (!tableBrainKey()) { MEM = emptyMem(); return; }
+    bindBrainVault();
+    const hist = getTableRounds().filter(function (r) { return r.src === 'live'; });
     if (MEM.trained >= hist.length) return;
     const start = MEM.trained;
     for (let i = Math.max(1, start); i < hist.length; i++) {
@@ -641,8 +677,9 @@
     MEM.trained = hist.length;
     saveMem();
   }
+  bindBrainVault();
   brainCatchup();
-  pullBrainCloud().then(function () { brainCatchup(); }).catch(function () { });
+  pullBrainCloud().then(function () { bindBrainVault(); brainCatchup(); }).catch(function () { });
 
   // MACHINE LEARNING LEVEL 3: Adaptive brain with pattern learning
   var ML = {
@@ -924,21 +961,12 @@
       // Rebuild card count
       CardCount.rebuildFromRounds();
       // Recalculate side balance
-      var allDec = rounds.filter(function(r) { return r.o !== 'X'; });
+      var tblR = getTableRounds();
+      var allDec = tblR.filter(function(r) { return r.o !== 'X'; });
       if (allDec.length > 0) {
         var dCount = allDec.filter(function(r) { return r.o === 'D'; }).length;
         var tCount = allDec.filter(function(r) { return r.o === 'T'; }).length;
-        MEM.sideBalance = { D: dCount, T: tCount, X: rounds.length - dCount - tCount, n: rounds.length };
-      }
-      // Decay old patterns
-      if (MEM.decayFactor && MEM.trained > 100) {
-        Object.keys(MEM.grams2||{}).forEach(function(k) {
-          if (MEM.grams2[k].n > 50) {
-            MEM.grams2[k].D = Math.round(MEM.grams2[k].D * MEM.decayFactor);
-            MEM.grams2[k].T = Math.round(MEM.grams2[k].T * MEM.decayFactor);
-            MEM.grams2[k].n = MEM.grams2[k].D + MEM.grams2[k].T + (MEM.grams2[k].X||0);
-          }
-        });
+        MEM.sideBalance = { D: dCount, T: tCount, X: tblR.length - dCount - tCount, n: tblR.length };
       }
       // ML: Adapt weights based on recent performance
       ML.adapt();
@@ -1063,7 +1091,7 @@
     if (votes.D > votes.T) pick = 'D';
     else if (votes.T > votes.D) pick = 'T';
     else {
-      try { var mlPick = ML.predict(rounds); if (mlPick) pick = mlPick; else pick = dc ? dc.pick : (hot || side || 'D'); }
+      try { var mlPick = ML.predict(hist); if (mlPick) pick = mlPick; else pick = dc ? dc.pick : (hot || side || 'D'); }
       catch(e) { pick = dc ? dc.pick : (hot || side || 'D'); }
     }
     return { pick, q, mode: (dc && pick === dc.pick) ? 'clone-vote' : 'vote', dcPick: dc && dc.pick, votes, streak, side, recD, recT, recN: decided.length, hot, streakPick, cD: q.cD, cT: q.cT, gram: gp, recov: rp };
@@ -2026,7 +2054,7 @@
       seen.add(k);
       rounds.push(rec);
       added.push(rec);
-      try { brainObserve(o); } catch (e) { }
+      try { if (rec.tbl !== undefined && rec.tbl !== null) brainObserve(o, rec); } catch (e) { }
       try { tapeScore(o); } catch (e) { }
       /* FLAGSHIP: register card count, bet timer, session record */
       try {

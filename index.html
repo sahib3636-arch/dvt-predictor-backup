@@ -627,6 +627,20 @@ button, .ql-btn, .p7{touch-action:manipulation}
 
   <!-- PREDICT / HOME -->
   <section id="s-predict" class="on">
+    <div id="predictTableBar" style="display:flex;flex-wrap:wrap;gap:5px;margin:0 0 10px;align-items:center">
+      <span id="predictTableLabel" style="font-size:9px;letter-spacing:1.6px;font-weight:800;color:var(--gold);margin-right:4px">SELECT TABLE</span>
+      <button class="tbl-btn on" data-tbl="auto" type="button">ALL</button>
+      <button class="tbl-btn" data-tbl="0" type="button">T0</button>
+      <button class="tbl-btn" data-tbl="1" type="button">T1</button>
+      <button class="tbl-btn" data-tbl="2" type="button">T2</button>
+      <button class="tbl-btn" data-tbl="3" type="button">T3</button>
+      <button class="tbl-btn" data-tbl="4" type="button">T4</button>
+      <button class="tbl-btn" data-tbl="5" type="button">T5</button>
+      <button class="tbl-btn" data-tbl="6" type="button">T6</button>
+      <button class="tbl-btn" data-tbl="7" type="button">T7</button>
+      <button class="tbl-btn" data-tbl="8" type="button">T8</button>
+      <button class="tbl-btn" data-tbl="9" type="button">T9</button>
+    </div>
     <!-- Live Status Strip (same as Live tab) -->
     <div class="livestrip" id="predictStrip">
       <span class="warn" id="predictDot" style="width:8px;height:8px;border-radius:50%;flex:none"></span>
@@ -871,7 +885,7 @@ button, .ql-btn, .p7{touch-action:manipulation}
       </div>
       <div class="kv" style="margin-top:8px">
         <span class="k">App version</span>
-        <span>v60 Phase 4</span>
+        <span>v61 vault</span>
       </div>
     </div>
     <footer>
@@ -897,8 +911,8 @@ button, .ql-btn, .p7{touch-action:manipulation}
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg>MORE</button>
 </nav>
 
-<script src="engine.js?v=56"></script>
-<script src="app.js?v=56"></script>
+<script src="engine.js?v=61"></script>
+<script src="app.js?v=61"></script>
 <script>
 // === DEBUG PANEL (visible on screen, no adb needed) ===
 (function() {
@@ -956,7 +970,7 @@ window.ingestNativeRound = function(data) {
   
   if (typeof ingestFeedList === 'function') {
     ingestFeedList(rounds.map(function(r) {
-      return { ts: r.ts || Math.floor(Date.now()/1000), winner: r.winner, dragon: r.dragon, tiger: r.tiger, src: 'live' };
+      return { ts: r.ts || Math.floor(Date.now()/1000), winner: r.winner, dragon: r.dragon, tiger: r.tiger, tbl: r.tbl, src: 'live' };
     }));
     // Mark feed as healthy so app shows LIVE not FEED UNREACHABLE
     if (window.liveState) { window.liveState.ok = true; window.liveState.lastCheck = Date.now(); }

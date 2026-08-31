@@ -748,6 +748,27 @@ button, .ql-btn, .p7{touch-action:manipulation}
         </div>
         <div class="msg" id="refreshMsg"></div>
       </details>
+      <!-- TABLE SELECTOR -->
+      <details style="margin-top:8px">
+        <summary>Table Selection <span id="activeTableLabel" style="color:var(--gold);font-weight:800">ALL</span></summary>
+        <div style="margin-top:8px">
+          <div class="note" style="margin:0 0 8px">Select which table to track. Bridge collects all tables — you pick one.</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px" id="tableGrid">
+            <button class="tbl-btn on" data-tbl="auto">ALL</button>
+            <button class="tbl-btn" data-tbl="0">T0</button>
+            <button class="tbl-btn" data-tbl="1">T1</button>
+            <button class="tbl-btn" data-tbl="2">T2</button>
+            <button class="tbl-btn" data-tbl="3">T3</button>
+            <button class="tbl-btn" data-tbl="4">T4</button>
+            <button class="tbl-btn" data-tbl="5">T5</button>
+            <button class="tbl-btn" data-tbl="6">T6</button>
+            <button class="tbl-btn" data-tbl="7">T7</button>
+            <button class="tbl-btn" data-tbl="8">T8</button>
+            <button class="tbl-btn" data-tbl="9">T9</button>
+          </div>
+          <div class="note" style="margin-top:6px">Upload a Capture to auto-detect your table, or pick manually above.</div>
+        </div>
+      </details>
       <div class="note">The 24/7 recorder runs inside Cloudflare — fully automatic. If sessions expire, upload a fresh 2-minute capture above to resume instantly.</div>
     </div>
   </section>
@@ -828,6 +849,7 @@ button, .ql-btn, .p7{touch-action:manipulation}
         <button class="ghost" id="expJson">Backup</button>
         <button class="ghost" id="expCsv">CSV</button>
         <button class="ghost" id="impJson">Restore</button>
+        <button class="ghost" id="expDiag" style="color:var(--gold);border-color:rgba(227,175,80,.3)">📋 Diagnosis</button>
         <input type="file" id="impFile" accept=".json" style="display:none">
       </div>
       <div class="msg" id="dataMsg"></div>
@@ -952,6 +974,20 @@ setInterval(function() {
     window.liveState.lastCheck = Date.now();
   }
 }, 2000);
+// Global error handler — prevent crashes from killing the app
+window.onerror = function(msg, url, line, col, err) {
+  try {
+    var el = document.getElementById('debugPanel');
+    if (el) el.innerHTML += '<div style="color:#ff6b6b;font-size:10px;">ERR: ' + (msg||'').substring(0,80) + '</div>';
+  } catch(e) {}
+  return false; // Don't block default handler
+};
+window.addEventListener('unhandledrejection', function(e) {
+  try {
+    var el = document.getElementById('debugPanel');
+    if (el) el.innerHTML += '<div style="color:#ff6b6b;font-size:10px;">PROMISE: ' + (e.reason||'').toString().substring(0,80) + '</div>';
+  } catch(err) {}
+});
 </script>
 </body>
 </html>

@@ -266,12 +266,22 @@
     document.querySelectorAll('.tbl-btn').forEach(function(b) { b.classList.remove('on'); });
     btn.classList.add('on');
     currentTable = btn.dataset.tbl;
-    toast('Table: ' + currentTable.toUpperCase());
+    toast('Table: ' + (currentTable === 'auto' ? 'ALL' : 'T' + currentTable));
     // Tag future rounds with table info
     if (PERSIST) { try { localStorage.setItem('dvt.table', currentTable); } catch(e) {} }
+    // Update label
+    var label = document.getElementById('activeTableLabel');
+    if (label) label.textContent = currentTable === 'auto' ? 'ALL' : 'T' + currentTable;
+    // Re-render
+    try { render(); } catch(e) {}
   }
   // Export to window so HTML onclick handlers work
   window.selectTable = selectTable;
+  // Bind table buttons
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.tbl-btn');
+    if (btn) selectTable(btn);
+  });
   // Restore table selection
   (function() {
     if (!PERSIST) return;
@@ -284,17 +294,48 @@
           document.querySelectorAll('.tbl-btn').forEach(function(b) { b.classList.remove('on'); });
           btn.classList.add('on');
         }
+        var label = document.getElementById('activeTableLabel');
+        if (label) label.textContent = currentTable === 'auto' ? 'ALL' : 'T' + currentTable;
       }
     } catch(e) {}
   })();
   function savePlay() { /* session-only desk — a refresh wipes the 7 */ }
-  function last7() { return playWin.slice(-7); }
+  function last7() { 
+    if (!currentTable || currentTable === 'auto') return playWin.slice(-7);
+    // Filter playWin by table — need to match rounds by index
+    var tblIndices = [];
+    for (var i = 0; i < rounds.length; i++) {
+      var r = rounds[i];
+      if (r.tbl === currentTable || r.tbl === parseInt(currentTable) || String(r.tbl) === String(currentTable)) {
+        tblIndices.push(i);
+      }
+    }
+    if (tblIndices.length < 3) return playWin.slice(-7); // fallback
+    // Map round indices to playWin outcomes
+    var tblOutcomes = tblIndices.map(function(idx) { return playWin[idx]; }).filter(function(o) { return o != null; });
+    return tblOutcomes.slice(-7);
+  }
   function last7Filtered() {
     if (!currentTable || currentTable === 'auto') return last7();
-    // Filter rounds by table tag - show all for auto, filter for specific
-    const tblRounds = rounds.filter(function(r) { return r.tbl === currentTable; }).slice(-7);
+    // Filter rounds by table tag - support both string and numeric table IDs
+    const tblRounds = rounds.filter(function(r) { 
+      return r.tbl === currentTable || r.tbl === parseInt(currentTable) || String(r.tbl) === String(currentTable);
+    }).slice(-7);
     if (tblRounds.length >= 3) return tblRounds.map(function(r) { return r.o; });
     return last7(); // Fallback to all rounds if not enough for this table
+  }
+
+  // Get rounds filtered by selected table (for Brain/engine)
+  function getTableRounds() {
+    if (!currentTable || currentTable === 'auto') return rounds;
+    return rounds.filter(function(r) {
+      return r.tbl === currentTable || r.tbl === parseInt(currentTable) || String(r.tbl) === String(currentTable);
+    });
+  }
+  function sameTable(r) {
+    if (!currentTable || currentTable === 'auto') return true;
+    if (!r) return false;
+    return r.tbl === currentTable || r.tbl === parseInt(currentTable) || String(r.tbl) === String(currentTable);
   }
   function deskHist() { return last7().map(function (o) { return { o: o }; }); }
   function paintPlay7() {
@@ -533,7 +574,8 @@
 
   /* Incremental train: call AFTER a new outcome is already in `rounds`. */
   function brainObserve(o) {
-    const dec = rounds.filter(r => r.o !== 'X').map(r => r.o);
+    const hist = getTableRounds();
+    const dec = hist.filter(r => r.o !== 'X').map(r => r.o);
     if (dec.length >= 3) bumpRow(MEM.grams2, dec.slice(-3, -1).join(''), o);
     if (dec.length >= 4) bumpRow(MEM.grams3, dec.slice(-4, -1).join(''), o);
     /* PHASE 3: 4-gram training */
@@ -548,17 +590,17 @@
       if (hit) MEM.hits++;
       bumpRow(MEM.recov, String(Math.min(MEM.lossRun, 3)), o);
       MEM.lossRun = hit ? 0 : (MEM.lossRun + 1);
-      const dc = dtClone(rounds.slice(0, -1));
+      const dc = dtClone(hist.slice(0, -1));
       if (dc) { MEM.methods.clone.a++; if (dc.pick === o) MEM.methods.clone.h++; ML.record('clone', dc.pick === o); }
-      const gp = gramPick(rounds.slice(0, -1));
+      const gp = gramPick(hist.slice(0, -1));
       if (gp) { MEM.methods.gram.a++; if (gp.pick === o) MEM.methods.gram.h++; ML.record(gp.src === '4-gram' ? 'gram4' : 'gram', gp.pick === o); }
       try {
-        const ec = engineCall(rounds.slice(0, -1));
+        const ec = engineCall(hist.slice(0, -1));
         if (ec && ec.pick) ML.record('engine', ec.pick === o);
       } catch(e) {}
       
       // LEVEL 2: Train Markov chain
-      try { ML.trainMarkov(rounds.slice(0, -1)); } catch(e) {}
+      try { ML.trainMarkov(hist.slice(0, -1)); } catch(e) {}
       
       // LEVEL 2: Train loss recovery patterns
       try { ML.trainLossPattern(MEM.lossRun, o); } catch(e) {}
@@ -568,7 +610,7 @@
       
       // LEVEL 2: Calibrate confidence
       try {
-        var lastBrain = computeBrain(rounds.slice(0, -1));
+        var lastBrain = computeBrain(hist.slice(0, -1));
         if (lastBrain) ML.calibrateConf(lastBrain.conf, hit);
       } catch(e) {}
       
@@ -578,16 +620,17 @@
         ML.lastEnsemble = null;
       }
     }
-    MEM.trained = rounds.length;
+    MEM.trained = hist.length;
     saveMem();
   }
 
   function brainCatchup() {
-    if (MEM.trained >= rounds.length) return;
+    const hist = getTableRounds();
+    if (MEM.trained >= hist.length) return;
     const start = MEM.trained;
-    for (let i = Math.max(1, start); i < rounds.length; i++) {
-      const o = rounds[i].o;
-      const prefix = rounds.slice(0, i + 1);
+    for (let i = Math.max(1, start); i < hist.length; i++) {
+      const o = hist[i].o;
+      const prefix = hist.slice(0, i + 1);
       const dec = prefix.filter(r => r.o !== 'X').map(r => r.o);
       if (dec.length >= 3) bumpRow(MEM.grams2, dec.slice(-3, -1).join(''), o);
       if (dec.length >= 4) bumpRow(MEM.grams3, dec.slice(-4, -1).join(''), o);
@@ -595,7 +638,7 @@
       if (!MEM.grams4) MEM.grams4 = {};
       if (dec.length >= 5) bumpRow(MEM.grams4, dec.slice(-5, -1).join(''), o);
     }
-    MEM.trained = rounds.length;
+    MEM.trained = hist.length;
     saveMem();
   }
   brainCatchup();
@@ -1241,46 +1284,47 @@
         
         // Brain sizes the bet based on confidence and mode
         if (mode === 'risk') {
-          // Risk mode: Brain is aggressive
+          // RISK MODE: Maximum aggression — go big or go home
+          unit = snapChip(start * 0.08);
+          if (bank < start * 0.55) unit = snapChip(bank * 0.06);
+          unit = Math.min(unit, snapChip(bank * 0.20));
+          
+          // Risk presses HARD on any win
+          var rmult = 1;
+          if (conf >= 45 && winRun === 1) rmult = 2;
+          else if (conf >= 45 && winRun >= 2) rmult = 4;
+          else if (conf >= 55 && winRun >= 1) rmult = 3;
+          
+          stake = snapChip(rmult * unit);
+          var rCap = Math.max(unit, snapChip(bank * 0.25));
+          stake = Math.min(stake, rCap, bank);
+          stake = snapChip(stake);
+          
+          // Risk tolerates more losses before pausing
+          if (lossRun >= 7) {
+            action = 'WAIT';
+            betWhy = 'Brain: pause after ' + lossRun + ' losses';
+          } else {
+            betWhy = rmult > 1 ? 'Brain: RISK press x' + rmult + ' ' + conf + '%' : 'Brain: risk ' + conf + '%';
+          }
+        } else {
+          // STABLE MODE: What Risk used to be — moderate aggression
           unit = snapChip(start * 0.05);
           if (bank < start * 0.55) unit = snapChip(bank * 0.04);
           unit = Math.min(unit, snapChip(bank * 0.12));
           
-          // Brain presses on high confidence
-          var rmult = 1;
-          if (conf >= 55 && winRun === 1) rmult = 2;
-          else if (conf >= 55 && winRun >= 2) rmult = 3;
-          
-          stake = snapChip(rmult * unit);
-          var rCap = Math.max(unit, snapChip(bank * 0.18));
-          stake = Math.min(stake, rCap, bank);
-          stake = snapChip(stake);
-          
-          // Brain pauses after too many losses
-          if (lossRun >= 5) {
-            action = 'WAIT';
-            betWhy = 'Brain: pause after ' + lossRun + ' losses';
-          } else {
-            betWhy = rmult > 1 ? 'Brain: press x' + rmult + ' ' + conf + '%' : 'Brain: risk ' + conf + '%';
-          }
-        } else {
-          // Stable mode: Brain is conservative
-          unit = snapChip(start * 0.035);
-          if (bank < start * 0.55) unit = snapChip(bank * 0.03);
-          unit = Math.min(unit, snapChip(bank * 0.08));
-          
-          // Brain presses on high confidence
+          // Stable presses on high confidence
           var mult = 1;
-          if (conf >= 62 && winRun === 1) mult = 2;
-          else if (conf >= 62 && winRun >= 2) mult = 3;
+          if (conf >= 55 && winRun === 1) mult = 2;
+          else if (conf >= 55 && winRun >= 2) mult = 3;
           
           stake = snapChip(mult * unit);
-          var cap = Math.max(unit, snapChip(bank * 0.12));
+          var cap = Math.max(unit, snapChip(bank * 0.18));
           stake = Math.min(stake, cap, bank);
           stake = snapChip(stake);
           
-          // Brain pauses after too many losses
-          if (lossRun >= 4) {
+          // Stable pauses after moderate losses
+          if (lossRun >= 5) {
             action = 'WAIT';
             betWhy = 'Brain: pause after ' + lossRun + ' losses';
           } else {
@@ -1394,7 +1438,7 @@
     // Ask Brain for the decision — pass sim state so Brain can decide
     var B;
     try { 
-      B = computeBrain(rounds, sim); 
+      B = computeBrain(getTableRounds(), sim); 
     } catch(e) { 
       return { action: 'WAIT', side: null, stake: 0, why: 'Brain error', unit: 0, mode: sim.mode }; 
     }
@@ -1485,7 +1529,7 @@
   function renderBrain() {
     const v = $('#brainVerdict'), elS = $('#brainSub'), badge = $('#brainBadge'), confEl = $('#brainConf');
     try {
-      const B = computeBrain(rounds, sim);
+      const B = computeBrain(getTableRounds(), sim);
       if (v) {
         v.textContent = B.verdict;
         v.className = 'brain-verdict ' + (B.pick === 'D' ? 'd' : 't');
@@ -1666,7 +1710,7 @@
     // Main prediction from Brain (single source of truth)
     let pick = null, conf = 0;
     try {
-      const B = computeBrain(rounds);
+      const B = computeBrain(getTableRounds());
       pick = B.pick;
       conf = B.conf || 0;
     } catch(e) {
@@ -1842,12 +1886,14 @@
 
   /* ================= LAST-7 DESK (prediction only — never written to rounds) ================= */
   const MERGE_SEC = 8;
-  function findNearLive(o, ts, d, t) {
+  function findNearLive(o, ts, d, t, tbl) {
     let best = null, bestDt = 1e9;
-    const slice = rounds.slice(-8);
+    const slice = rounds.slice(-20);  // Check more rounds (was 8) for multi-table
     for (let i = 0; i < slice.length; i++) {
       const r = slice[i];
       if (!r || r.src !== 'live' || r.o !== o) continue;
+      // Must match table ID if both have one
+      if (tbl !== undefined && tbl !== 'auto' && r.tbl !== undefined && r.tbl !== 'auto' && String(r.tbl) !== String(tbl)) continue;
       if (d && t && r.d && r.t && (r.d !== d || r.t !== t)) continue;
       const dt = Math.abs((r.ts || 0) - ts);
       if (dt < bestDt) { bestDt = dt; best = r; }
@@ -1958,7 +2004,7 @@
     var el2 = $('#liveUrl2'); if (el2) el2.value = liveState.url;
   })();
 
-  function liveKey(r) { return (r.ts || 0) + '|' + r.o + '|' + (r.d || '') + '|' + (r.t || ''); }
+  function liveKey(r) { return (r.ts || 0) + '|' + r.o + '|' + (r.d || '') + '|' + (r.t || '') + '|t' + (r.tbl !== undefined ? r.tbl : ''); }
 
   function ingestFeedList(list) {
     if (!Array.isArray(list) || !list.length) { paintSlots(); return 0; }
@@ -1970,12 +2016,13 @@
       if (!r || !r.winner) continue;
       const o = r.winner === '=' ? 'X' : r.winner;
       if (!'DTX'.includes(o)) continue;
-      const ts = +r.ts;
+      let ts = +r.ts;
+      if (ts > 1e12) ts = ts / 1000;
       if (!(ts > 1600000000) || ts > 4000000000) continue;
-      const rec = { ts, o, src: 'live', tbl: currentTable || 'auto', d: cleanRank(r.dragon), t: cleanRank(r.tiger) };
+      const rec = { ts, o, src: 'live', tbl: (r.tbl !== undefined && r.tbl !== null ? r.tbl : undefined), d: cleanRank(r.dragon), t: cleanRank(r.tiger) };
       const k = liveKey(rec);
       if (seen.has(k)) continue;
-      if (findNearLive(o, ts, rec.d, rec.t)) continue;
+      if (findNearLive(o, ts, rec.d, rec.t, rec.tbl)) continue;
       seen.add(k);
       rounds.push(rec);
       added.push(rec);
@@ -2004,6 +2051,7 @@
     // Settle money sim: settle pending bet with each new round, then make next bet
     if (sim.started && added.length) {
       for (var ai = 0; ai < added.length; ai++) {
+        if (!sameTable(added[ai])) continue;
         try {
           simSettleDesk(added[ai].o);
           simNewBet();
@@ -2046,17 +2094,20 @@
   }
 
   let inFlight = null;
+  let pollFailCount = 0;
   async function livePoll() {
     if (inFlight) return inFlight;
     const url = (liveState.url || WORKER_URL).replace(/\/+$/, '');
     const ac = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    const kill = setTimeout(function () { try { if (ac) ac.abort(); } catch (e) { } }, 6000);
+    const kill = setTimeout(function () { try { if (ac) ac.abort(); } catch (e) { } }, 8000);  // 8s timeout (was6s)
     inFlight = (async function () {
       try {
         const res = await fetch(url + '/feed.json?t=' + Date.now(), { cache: 'no-store', signal: ac ? ac.signal : undefined });
         if (!res.ok) throw new Error('http ' + res.status);
         applyFeedPayload(await res.json(), true);
+        pollFailCount = 0;  // Reset on success
       } catch (e) {
+        pollFailCount++;
         applyFeedPayload(null, false);
       } finally {
         clearTimeout(kill);
@@ -2922,6 +2973,225 @@
     ...rounds.map((r, i) => [i + 1, new Date(r.ts * 1000).toISOString(), r.o, r.src])];
     download('dvt-rounds.csv', rows.map(x => x.join(',')).join('\n'), 'text/csv');
   });
+
+  // DIAGNOSIS EXPORT — comprehensive report for debugging
+  const expDiag = $('#expDiag');
+  if (expDiag) expDiag.addEventListener('click', async () => {
+    try {
+      var diag = {};
+      
+      // 1. App Info
+      diag.app = { version: 'v60', date: new Date().toISOString(), userAgent: navigator.userAgent };
+      
+      // 2. Rounds Summary
+      var liveRounds = rounds.filter(function(r) { return r.src === 'live'; });
+      var lastLive = liveRounds.length ? liveRounds[liveRounds.length - 1] : null;
+      diag.rounds = {
+        total: rounds.length,
+        live: liveRounds.length,
+        manual: rounds.filter(function(r) { return r.src === 'manual'; }).length,
+        ocr: rounds.filter(function(r) { return r.src === 'ocr'; }).length,
+        paste: rounds.filter(function(r) { return r.src === 'paste'; }).length,
+        lastLiveTs: lastLive ? new Date(lastLive.ts * 1000).toISOString() : null,
+        lastLiveAge: lastLive ? Math.round(Date.now() / 1000 - lastLive.ts) + 's' : 'none',
+        last10: rounds.slice(-10).map(function(r) { return { o: r.o, ts: new Date(r.ts * 1000).toISOString(), src: r.src, tbl: r.tbl }; })
+      };
+      
+      // 2b. Table Info
+      var tableCounts = {};
+      rounds.forEach(function(r) { var t = r.tbl !== undefined ? r.tbl : 'none'; tableCounts[t] = (tableCounts[t] || 0) + 1; });
+      diag.table = {
+        selected: currentTable,
+        tableCounts: tableCounts,
+        filteredRounds: getTableRounds().length
+      };
+      
+      // 3. Brain Memory
+      diag.brain = {
+        trained: MEM.trained,
+        hits: MEM.hits,
+        atts: MEM.atts,
+        accuracy: MEM.atts ? (100 * MEM.hits / MEM.atts).toFixed(1) + '%' : 'N/A',
+        lossRun: MEM.lossRun,
+        lastPick: MEM.lastPick,
+        grams2Count: Object.keys(MEM.grams2 || {}).length,
+        grams3Count: Object.keys(MEM.grams3 || {}).length,
+        grams4Count: Object.keys(MEM.grams4 || {}).length,
+        sideBalance: MEM.sideBalance,
+        methods: MEM.methods
+      };
+      
+      // 4. ML System
+      diag.ml = {
+        weights: ML.weights,
+        methodAccuracies: {},
+        markov2Keys: Object.keys(ML.markov2 || {}).length,
+        markov3Keys: Object.keys(ML.markov3 || {}).length,
+        lossPatternKeys: Object.keys(ML.lossPatterns || {}),
+        hourPatternKeys: Object.keys(ML.hourPatterns || {}).length,
+        confBinKeys: Object.keys(ML.confBins || {}).length
+      };
+      ['clone', 'gram', 'gram4', 'engine', 'markov', 'ensemble'].forEach(function(m) {
+        var acc = ML.accuracy(m);
+        diag.ml.methodAccuracies[m] = acc !== null ? (acc * 100).toFixed(1) + '%' : 'N/A (< 10 samples)';
+      });
+      
+      // 5. Live Feed Status
+      diag.liveFeed = {
+        url: liveState.url,
+        ok: liveState.ok,
+        wsOk: liveState.wsOk,
+        synced: liveState.synced,
+        feedNewest: liveState.feedNewest,
+        lastCheck: liveState.lastCheck ? new Date(liveState.lastCheck).toISOString() : null,
+        lastSyncTs: liveState.lastSyncTs ? new Date(liveState.lastSyncTs).toISOString() : null,
+        health: liveState.health
+      };
+      
+      // 6. Bridge Status
+      try {
+        var bridgeUrl = 'https://dvt-cloud-bridge.bonto.run';
+        var bridgeRes = await fetch(bridgeUrl, { signal: AbortSignal.timeout(5000) });
+        diag.bridge = await bridgeRes.json();
+        diag.bridge.url = bridgeUrl;
+      } catch(e) {
+        diag.bridge = { error: e.message, url: 'https://dvt-cloud-bridge.bonto.run' };
+      }
+      
+      // 7. Worker Status
+      try {
+        var workerRes = await fetch('https://dvt-watcher.sahib3636.workers.dev/feed.json', { signal: AbortSignal.timeout(5000) });
+        var workerData = await workerRes.json();
+        diag.worker = {
+          ok: true,
+          roundsInFeed: (workerData.rounds || []).length,
+          newest: workerData.rounds && workerData.rounds.length ? new Date(workerData.rounds[workerData.rounds.length - 1].ts).toISOString() : null
+        };
+      } catch(e) {
+        diag.worker = { error: e.message };
+      }
+      
+      // 8. Sim Status
+      diag.sim = {
+        started: sim.started,
+        mode: sim.mode,
+        bank: sim.bank,
+        startBank: sim.startBank,
+        pnl: sim.bank - sim.startBank,
+        bets: (sim.bets || []).length,
+        realBets: (sim.bets || []).filter(function(b) { return !b.wait; }).length,
+        waits: (sim.bets || []).filter(function(b) { return b.wait; }).length,
+        lossRun: sim.lossRun,
+        winRun: sim.winRun,
+        paused: sim.paused,
+        pendingBet: sim.pendingBet
+      };
+      
+      // 9. Tape (Engine Score)
+      diag.tape = {
+        cells: tape.cells.length,
+        trained: tape.trained,
+        pending: tape.pending,
+        recentHits: tape.cells.filter(function(c) { return c.hit === true; }).length,
+        recentMisses: tape.cells.filter(function(c) { return c.hit === false; }).length
+      };
+      
+      // 10. Card Count
+      diag.cardCount = {
+        totalDealt: CardCount.totalDealt(),
+        penetration: CardCount.penetration() + '%',
+        trueCount: CardCount.trueCount(),
+        shoeBias: CardCount.shoeBias()
+      };
+      
+      // 11. Session
+      diag.session = Session.summary();
+      
+      // 12. Storage
+      diag.storage = {
+        roundsKey: 'dvt.rounds.v2',
+        brainKey: 'dvt.brainmem',
+        mlKey: 'dvt.ml',
+        simKey: 'dvt.sim',
+        tapeKey: 'dvt.tape',
+        persist: PERSIST
+      };
+      
+      // 13. Signals (Engine)
+      try {
+        var S = getSignals();
+        diag.signals = {
+          engAtt: S.engAtt, engHit: S.engHit, engAcc: S.engAtt ? (100 * S.engHit / S.engAtt).toFixed(1) + '%' : 'N/A',
+          dtAtt: S.dtAtt, dtHit: S.dtHit, dtAcc: S.dtAtt ? (100 * S.dtHit / S.dtAtt).toFixed(1) + '%' : 'N/A',
+          trAtt: S.trAtt, trHit: S.trHit, trAcc: S.trAtt ? (100 * S.trHit / S.trAtt).toFixed(1) + '%' : 'N/A'
+        };
+      } catch(e) { diag.signals = { error: e.message }; }
+      
+      var diagJson = JSON.stringify(diag, null, 2);
+      
+      // Save to localStorage so it persists
+      try { localStorage.setItem('dvt.diagnosis', diagJson); } catch(e) {}
+      
+      // Try download first (works in browsers)
+      try {
+        download('dvt-diagnosis.json', diagJson, 'application/json');
+      } catch(e) {}
+      
+      // Also copy to clipboard (works in WebView)
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(diagJson).then(function() {
+            toast('Diagnosis copied to clipboard & saved');
+          }).catch(function() {
+            // Fallback: show in prompt for manual copy
+            showDiagnosisPopup(diagJson);
+          });
+        } else {
+          showDiagnosisPopup(diagJson);
+        }
+      } catch(e) {
+        showDiagnosisPopup(diagJson);
+      }
+    } catch(e) {
+      toast('Diagnosis error: ' + e.message);
+    }
+  });
+  
+  function showDiagnosisPopup(json) {
+    // Create a modal with copyable text
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+    var box = document.createElement('div');
+    box.style.cssText = 'background:#1a1a2e;border:1px solid #e8963f;border-radius:12px;padding:16px;max-width:100%;max-height:90vh;display:flex;flex-direction:column;';
+    box.innerHTML = '<div style="color:#e8963f;font-weight:bold;margin-bottom:8px;font-size:14px;">📋 Diagnosis JSON (tap to copy)</div>' +
+      '<textarea id="diagTextarea" style="background:#0d1117;color:#58a6ff;border:1px solid #333;border-radius:8px;padding:8px;font-size:11px;font-family:monospace;flex:1;min-height:200px;max-height:60vh;width:90vw;resize:none;" readonly>' + json.replace(/</g, '&lt;') + '</textarea>' +
+      '<div style="display:flex;gap:8px;margin-top:8px;">' +
+      '<button id="diagCopyBtn" style="flex:1;background:#e8963f;color:#000;border:none;border-radius:8px;padding:10px;font-weight:bold;cursor:pointer;">📋 Copy</button>' +
+      '<button id="diagCloseBtn" style="flex:1;background:#333;color:#fff;border:none;border-radius:8px;padding:10px;cursor:pointer;">Close</button>' +
+      '</div>';
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    
+    var ta = document.getElementById('diagTextarea');
+    ta.focus(); ta.select();
+    
+    document.getElementById('diagCopyBtn').onclick = function() {
+      ta.select();
+      try {
+        document.execCommand('copy');
+        toast('Copied to clipboard!');
+      } catch(e) {
+        toast('Long-press to copy');
+      }
+    };
+    document.getElementById('diagCloseBtn').onclick = function() {
+      overlay.remove();
+    };
+    overlay.onclick = function(e) {
+      if (e.target === overlay) overlay.remove();
+    };
+    toast('Diagnosis saved — tap Copy in popup');
+  }
   const impJson = $('#impJson');
   if (impJson) impJson.addEventListener('click', () => $('#impFile').click());
   const impFile = $('#impFile');
@@ -3020,7 +3290,7 @@
     var gauge = document.getElementById('confGauge');
     if (gauge && rounds.length >= 7) {
       try {
-        var B = computeBrain(rounds);
+        var B = computeBrain(getTableRounds());
         gauge.innerHTML = confidenceGauge(B.conf);
       } catch(e) {}
     }
